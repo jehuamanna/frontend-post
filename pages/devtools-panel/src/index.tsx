@@ -1,5 +1,6 @@
 import '@src/index.css';
 import Panel from '@src/Panel';
+import { TabsProvider } from '@src/TabsContext';
 import { createRoot } from 'react-dom/client';
 
 const init = () => {
@@ -9,7 +10,11 @@ const init = () => {
   }
   const root = createRoot(appContainer);
 
-  root.render(<Panel />);
+  root.render(
+    <TabsProvider>
+      <Panel />
+    </TabsProvider>,
+  );
 };
 
 init();

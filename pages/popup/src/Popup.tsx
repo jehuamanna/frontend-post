@@ -1,10 +1,8 @@
 import '@src/Popup.css';
-import { t } from '@extension/i18n';
-import { PROJECT_URL_OBJECT, useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
-import { exampleThemeStorage } from '@extension/storage';
-import { cn, ErrorDisplay, LoadingSpinner, ToggleButton } from '@extension/ui';
-import { useState } from 'react';
 import { Button } from './components/ui/button';
+import { withErrorBoundary, withSuspense } from '@extension/shared';
+import { ErrorDisplay, LoadingSpinner } from '@extension/ui';
+import { useState } from 'react';
 
 const Popup = () => {
   const [activeTab] = useState('Tab 1');
@@ -34,7 +32,7 @@ const Popup = () => {
             <div className="flex-grow">
               <textarea
                 className="w-full rounded-lg border border-gray-200 p-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                rows="4"
+                rows={4}
                 placeholder="// editable content to paste fetch call"
               />
             </div>

@@ -1,1 +1,8 @@
 @import '@extension/ui/global.css';
+
+
+.editable:empty:before {
+    content: attr(data-placeholder);
+    @apply text-gray-400;
+    pointer-events: none;
+  }
