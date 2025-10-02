@@ -1,23 +1,70 @@
-import { extractCookiesFromRawHeaders } from './RawNetworkCapture';
+import { useEffect, useRef } from 'react';
 
-export interface FetchResult {
-  body: string;
-  headers: string;
-  cookies: string[];
-  statusCode: number | null;
+interface PortMessage {
+  type: string;
+  result?: FetchResult;
+  error?: string;
+  requestId?: string;
 }
 
 /**
- * Utility for executing fetch requests with raw cookie extraction
+ * Utility for executing fetch requests via the background script
  *
  * This does NOT manage local React state.
  */
 export const useFetchExecutor = () => {
+  // Create a ref to store the port connection to the background script
+  const portRef = useRef<chrome.runtime.Port | null>(null);
+  // Create a ref for pending requests
+  const pendingRequestsRef = useRef<
+    Map<string, { resolve: (value: FetchResult) => void; reject: (reason: Error) => void }>
+  >(new Map());
+
+  // Set up the port connection when the hook is first used
+  useEffect(() => {
+    // Establish a connection to the background script
+    const port = chrome.runtime.connect({ name: 'devtools-panel' });
+    portRef.current = port;
+
+    // Set up message handler to receive responses from the background script
+    port.onMessage.addListener((message: PortMessage) => {
+      console.log('Received message from background:', message);
+
+      if (message.requestId) {
+        const pendingRequest = pendingRequestsRef.current.get(message.requestId);
+
+        if (pendingRequest) {
+          if (message.type === 'FETCH_RESULT' && message.result) {
+            pendingRequest.resolve(message.result);
+          } else if (message.type === 'FETCH_ERROR' && message.error) {
+            pendingRequest.reject(new Error(message.error));
+          }
+          pendingRequestsRef.current.delete(message.requestId);
+        }
+      } else if (message.type === 'FETCH_ERROR' && message.error) {
+        // Handle error response without requestId by rejecting all pending requests
+        pendingRequestsRef.current.forEach(request => {
+          request.reject(new Error(message.error));
+        });
+        pendingRequestsRef.current.clear();
+      }
+    });
+
+    // Clean up the port connection when the component unmounts
+    return () => {
+      if (portRef.current) {
+        portRef.current.disconnect();
+        portRef.current = null;
+      }
+    };
+  }, []);
+
   /**
-   * Execute a fetch request and return the results
+   * Execute a fetch request via the background script and return the results
    */
   const executeFetch = async (fetchUrl: string, headersAndCookies: string): Promise<FetchResult> => {
     try {
+      // Basic validation before sending to background
       const url = fetchUrl.trim();
       if (!url) {
         return {
@@ -27,78 +74,47 @@ export const useFetchExecutor = () => {
           statusCode: null,
         };
       }
-
-      let options: RequestInit = {};
-      try {
-        if (headersAndCookies.trim()) {
-          options = JSON.parse(headersAndCookies);
-        }
-      } catch (err: any) {
+      
+      // Check if port is established
+      if (!portRef.current) {
         return {
-          body: `Error parsing fetch options: ${err.message}`,
+          body: 'Error: Connection to background script not established',
           headers: '',
           cookies: [],
           statusCode: null,
         };
       }
 
-      const response = await fetch(url, options);
-      const statusCode = response.status;
+      // Generate a unique request ID
+      const requestId = `${url}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      
+      // Create a promise that will be resolved when we receive a response
+      const requestPromise = new Promise<FetchResult>((resolve, reject) => {
+        pendingRequestsRef.current.set(requestId, { resolve, reject });
 
-      const headers: Record<string, string | string[]> = {};
-      let cookies: string[] = [];
-
-      // First pass: collect headers
-      if (response.headers && typeof response.headers.forEach === 'function') {
-        response.headers.forEach((value, key) => {
-          headers[key.toLowerCase()] = value;
-          if (key.toLowerCase() === 'set-cookie') {
-            cookies.push(value);
-          }
+        // Send the request to the background script
+        portRef.current?.postMessage({
+          type: 'EXECUTE_FETCH',
+          url,
+          options: headersAndCookies,
+          requestId,
         });
-      }
 
-      // Try raw Set-Cookie extraction (from devtools / network capture)
-      try {
-        const rawCookies = extractCookiesFromRawHeaders(url);
-        if (rawCookies && rawCookies.length > 0) {
-          cookies = rawCookies;
-        }
-      } catch (e) {
-        console.log('Error extracting raw cookies:', e);
-      }
+        // Set a timeout to reject the promise if we don't get a response
+        setTimeout(() => {
+          if (pendingRequestsRef.current.has(requestId)) {
+            pendingRequestsRef.current.delete(requestId);
+            reject(new Error('Request timed out'));
+          }
+        }, 30000); // 30 second timeout
+      });
 
-      // Ensure Set-Cookie header is visible
-      if (cookies.length > 0) {
-        headers['set-cookie'] = cookies.length === 1 ? cookies[0] : cookies;
-      } else {
-        headers['set-cookie'] = '[Browser security may be restricting access to Set-Cookie headers]';
-      }
-
-      const enhancedHeaders = {
-        _note: 'If Set-Cookie headers are present, they are shown in the Cookies section below with better formatting.',
-        ...headers,
-      };
-
-      // Response body
-      let body: string;
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        const json = await response.json();
-        body = JSON.stringify(json, null, 2);
-      } else {
-        body = await response.text();
-      }
-
+      // Wait for the response
+      return await requestPromise;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return {
-        body,
-        headers: JSON.stringify(enhancedHeaders, null, 2),
-        cookies,
-        statusCode,
-      };
-    } catch (error: any) {
-      return {
-        body: `Error executing fetch: ${error.message}`,
+        body: `Error executing fetch: ${errorMessage}`,
         headers: '',
         cookies: [],
         statusCode: null,
@@ -108,3 +124,10 @@ export const useFetchExecutor = () => {
 
   return { executeFetch };
 };
+
+export interface FetchResult {
+  body: string;
+  headers: string;
+  cookies: string[];
+  statusCode: number | null;
+}
