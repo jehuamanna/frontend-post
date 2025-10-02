@@ -5,6 +5,7 @@ interface Props {
   jsonString: string;
   className?: string;
   onChange?: (newJson: string) => void;
+  validate?: boolean; // when true, enforce JSON validity and pretty-print
 }
 
 /**
@@ -14,22 +15,23 @@ interface Props {
  * - White/grey theme
  * - Click line to inspect key/value
  */
-export default function JSONLineEditor({ jsonString = '', className = '', onChange }: Props) {
+export default function JSONLineEditor({ jsonString = '', className = '', onChange, validate = false }: Props) {
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState<string>('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [toastTimer, setToastTimer] = useState<number | null>(null);
 
-  // Format JSON with indentation; fallback to raw
+  // Display text; if validate, try to pretty-print JSON for view-only mode
   const formatted = useMemo(() => {
+    if (!validate) return jsonString;
     try {
       const parsed = JSON.parse(jsonString);
       return JSON.stringify(parsed, null, 2);
     } catch {
-      return jsonString;
+      return jsonString; // show as-is if not valid
     }
-  }, [jsonString]);
+  }, [jsonString, validate]);
 
   // Keep local editable text in sync when not editing
   useEffect(() => {
@@ -48,27 +50,22 @@ export default function JSONLineEditor({ jsonString = '', className = '', onChan
   };
 
   const handleExitEdit = () => {
-    // Try to parse and pretty-print; keep raw if invalid
     let next = text;
-    let parsedOk = true;
-    try {
-      const parsed = JSON.parse(text);
-      next = JSON.stringify(parsed, null, 2);
-    } catch {
-      // leave as-is if not valid JSON
-      parsedOk = false;
+    if (validate) {
+      try {
+        const parsed = JSON.parse(text);
+        next = JSON.stringify(parsed, null, 2);
+      } catch {
+        // invalid JSON: block save and show error
+        showToast('Invalid JSON. Fix and try again.', 'error');
+        return;
+      }
     }
-    // Debug: confirm save firing on blur
-    try { console.debug('[JSONViewer] Saving JSON on blur'); } catch {}
+    try { console.debug('[JSONViewer] Saving on blur'); } catch {}
     setText(next);
     setIsEditing(false);
     if (onChange) onChange(next);
-    // Toast feedback
-    if (parsedOk) {
-      showToast('Saved', 'success');
-    } else {
-      showToast('Parse error: saved as plain text', 'error');
-    }
+    showToast('Saved', 'success');
   };
 
   const handleKeyDownEdit: React.KeyboardEventHandler<HTMLTextAreaElement> = e => {

@@ -8,7 +8,7 @@ import { useTabs } from './TabsContext';
 import { withErrorBoundary, withSuspense } from '@extension/shared';
 import { ErrorDisplay, LoadingSpinner } from '@extension/ui';
 import { Maximize2, X } from 'lucide-react'; // expand icon
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { Tab } from './types';
 
 const Panel = () => {
@@ -19,6 +19,9 @@ const Panel = () => {
   const [activeTabId, setActiveTabId] = useState<string>(tabs[0]?.id ?? '');
   const [modalOpen, setModalOpen] = useState(false);
   const [modalValue, setModalValue] = useState('');
+  const modalPanelRef = useRef<HTMLDivElement | null>(null);
+  const [modalToast, setModalToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [modalToastTimer, setModalToastTimer] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<Tab | undefined>(tabs.find(t => t.id === activeTabId));
   const placeholder = 'Enter the Curl or Fetch Request';
   const ref = useRef<HTMLDivElement>(null);
@@ -72,14 +75,65 @@ const Panel = () => {
     setModalOpen(true);
   };
 
+  // Focus the modal panel when it opens, so blur can be detected reliably
+  useEffect(() => {
+    // Focus on next tick to ensure element exists
+    let timeoutId: number | null = null;
+    if (modalOpen) {
+      timeoutId = window.setTimeout(() => {
+        modalPanelRef.current?.focus();
+      }, 0);
+    }
+    return () => {
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+    };
+  }, [modalOpen]);
+
   // Save modal content back to context
-  const handleSave = () => {
+  const applyModalChanges = () => {
+    // Keep command in sync with modal text
     if (ref.current) {
       ref.current.innerText = modalValue;
     }
     updateTabInput(activeTabId, 'command', modalValue);
-    setModalOpen(false);
+
+    // Parse URL and options from the edited content
+    const details = extractFetchDetails(modalValue);
+    updateTabInput(activeTabId, 'url', details.url ?? '');
+    updateTabInput(activeTabId, 'options', looseRecursiveJSONParse(details.options ?? ''));
   };
+
+  const handleSave = () => {
+    applyModalChanges();
+    // Show toast, then close after a short delay so user can see it
+    // If you later want to reflect parse status, you can pass type accordingly
+    if (modalToastTimer) window.clearTimeout(modalToastTimer);
+    setModalToast({ message: 'Saved', type: 'success' });
+    const id = window.setTimeout(() => {
+      setModalToast(null);
+      setModalOpen(false);
+    }, 1000);
+    setModalToastTimer(id);
+  };
+
+  // Compute display text for options to avoid showing quoted strings
+  const optionsText = useMemo(() => {
+    const options = activeTab?.inputs.options as unknown;
+    try {
+      if (typeof options === 'string') {
+        // Try parsing; if it fails, show as-is (unquoted), not JSON-stringified
+        try {
+          const parsed = JSON.parse(options);
+          return JSON.stringify(parsed, null, 2);
+        } catch {
+          return options as string;
+        }
+      }
+      return JSON.stringify(options ?? {}, null, 2);
+    } catch {
+      return String(options ?? '');
+    }
+  }, [activeTab?.inputs.options]);
 
   // Clear active tab
   const handleClear = () => {
@@ -106,7 +160,10 @@ const Panel = () => {
   };
 
   const handleExecute = async () => {
-    const response = await executeFetch(activeTab?.inputs.url ?? '', JSON.stringify(activeTab?.inputs.options ?? {}));
+    const rawOpts = activeTab?.inputs.options;
+    const optionsObj =
+      typeof rawOpts === 'string' ? (looseRecursiveJSONParse(rawOpts) as unknown as RequestInit) : ((rawOpts ?? {}) as RequestInit);
+    const response = await executeFetch(activeTab?.inputs.url ?? '', optionsObj);
     updateTabOutput(activeTabId, 'statusCode', response.statusCode?.toString() ?? '');
     updateTabOutput(activeTabId, 'body', response.body);
     updateTabOutput(activeTabId, 'headers', response.headers);
@@ -180,28 +237,45 @@ const Panel = () => {
               </div>
               {/* Modal editor */}
               {modalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                <div
+                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+                  onMouseDown={e => {
+                    // Clicking backdrop: save & close
+                    if (e.currentTarget === e.target) {
+                      handleSave();
+                    }
+                  }}
+                >
 
-                  <div className="flex h-3/4 w-3/4 flex-col rounded-lg bg-white shadow-lg">
+                  <div
+                    ref={modalPanelRef}
+                    className="relative flex h-3/4 w-3/4 flex-col rounded-lg bg-white shadow-lg"
+                    tabIndex={-1}
+                    onBlur={e => {
+                      // If focus moved outside the panel entirely, save & close
+                      const next = e.relatedTarget as Node | null;
+                      if (!e.currentTarget.contains(next)) {
+                        handleSave();
+                      }
+                    }}
+                  >
 
                     {/* Header */}
                     <div className="flex items-center justify-between border-b p-3">
 
                       <h2 className="text-lg font-semibold">Edit Content</h2>
-                      <button onClick={() => setModalOpen(false)} className="p-1 text-gray-500 hover:text-gray-700">
-
+                      <button onClick={handleSave} className="p-1 text-gray-500 hover:text-gray-700" title="Save & Close">
+                        
                         <X size={20} />
                       </button>
                     </div>
                     {/* Editable big editor */}
-                    <div
-                      contentEditable
-                      suppressContentEditableWarning
-                      onInput={e => setModalValue((e.target as HTMLDivElement).innerText)}
-                      className="flex-1 overflow-y-auto p-4 outline-none"
-                      data-placeholder={placeholder}>
-
-                      {modalValue}
+                    <div className="flex-1 overflow-y-auto p-4">
+                      <JSONViewer
+                        jsonString={modalValue}
+                        onChange={val => setModalValue(val)}
+                        className="h-full"
+                      />
                     </div>
                     {/* Footer */}
                     <div className="flex justify-end gap-2 border-t p-3">
@@ -219,6 +293,20 @@ const Panel = () => {
                         Save
                       </button>
                     </div>
+                    {/* Modal Toast */}
+                    {modalToast && (
+                      <div
+                        className={`pointer-events-none absolute bottom-3 right-3 rounded border px-2 py-1 text-[11px] shadow-sm ${
+                          modalToast.type === 'success'
+                            ? 'bg-green-50 text-green-700 border-green-200'
+                            : 'bg-red-50 text-red-700 border-red-200'
+                        }`}
+                        role="status"
+                        aria-live="polite"
+                      >
+                        {modalToast.message}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -258,7 +346,8 @@ const Panel = () => {
               <div className="min-h-[200px] rounded-lg border border-gray-200 p-3">
                 <div className="text-center text-gray-700">
                   <JSONViewer
-                    jsonString={JSON.stringify(activeTab?.inputs.options ?? {}, null, 2)}
+                    jsonString={optionsText}
+                    validate={true}
                     onChange={newJson =>
                       updateTabInput(activeTabId, 'options', looseRecursiveJSONParse(newJson ?? ''))
                     }
@@ -273,6 +362,7 @@ const Panel = () => {
                 <div className="text-center text-gray-700">
                   <JSONViewer
                     jsonString={activeTab?.outputs.body ?? ''}
+                    validate={false}
                     onChange={newJson => updateTabOutput(activeTabId, 'body', newJson ?? '')}
                   />
                 </div>
@@ -282,6 +372,7 @@ const Panel = () => {
                 <div className="text-center text-gray-700">
                   <JSONViewer
                     jsonString={activeTab?.outputs.headers ?? ''}
+                    validate={false}
                     onChange={newJson => updateTabOutput(activeTabId, 'headers', newJson ?? '')}
                   />
                 </div>

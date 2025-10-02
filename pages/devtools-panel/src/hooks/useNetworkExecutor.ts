@@ -62,7 +62,7 @@ export const useFetchExecutor = () => {
   /**
    * Execute a fetch request via the background script and return the results
    */
-  const executeFetch = async (fetchUrl: string, headersAndCookies: string): Promise<FetchResult> => {
+  const executeFetch = async (fetchUrl: string, options: RequestInit | undefined | null): Promise<FetchResult> => {
     try {
       // Basic validation before sending to background
       const url = fetchUrl.trim();
@@ -96,7 +96,7 @@ export const useFetchExecutor = () => {
         portRef.current?.postMessage({
           type: 'EXECUTE_FETCH',
           url,
-          options: headersAndCookies,
+          options: options ?? {},
           requestId,
         });
 
