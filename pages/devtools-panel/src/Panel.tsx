@@ -31,26 +31,12 @@ const Panel = () => {
   const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
   const [renameInput, setRenameInput] = useState<string>('');
 
-  // Reorder unnamed tabs to always start from 1 and be sequential
-  useEffect(() => {
-    setTabs(prev => {
-      let counter = 1;
-      return prev.map(t => {
-        const m = /^Tab(\d+)$/.exec(t.name?.trim() ?? '');
-        if (m && !t.userRenamed) {
-          // This is an unnamed tab, renumber it sequentially
-          return { ...t, name: `Tab${counter++}` };
-        }
-        return t;
-      });
-    });
-  }, [tabs.length, setTabs]);
-
   // Compute next default tab name in the form Tab<number>
-  const getNextTabDefaultName = useCallback((): string => {
-    // Collect existing Tab<number> indices
+  const getNextTabDefaultName = useCallback((currentTabs: Tab[]): string => {
+    // Collect existing Tab<number> indices, excluding empty names
     const used = new Set(
-      tabs
+      currentTabs
+        .filter(t => t.name && t.name.trim() !== '')
         .map(t => {
           const m = /^Tab(\d+)$/.exec(t.name?.trim() ?? '');
           return m ? parseInt(m[1], 10) : null;
@@ -61,7 +47,7 @@ const Panel = () => {
     let n = 1;
     while (used.has(n)) n += 1;
     return `Tab${n}`;
-  }, [tabs]);
+  }, []);
 
   // Update tab name based on request content (METHOD lastPath), always re-evaluating
   const updateTabNameFromContent = useCallback(
@@ -98,7 +84,7 @@ const Panel = () => {
               return { ...t, name: path };
             }
 
-            const fallback = existingSuffix || current || getNextTabDefaultName();
+            const fallback = existingSuffix || current || getNextTabDefaultName(prev);
             return { ...t, name: fallback };
           }),
         );
@@ -300,45 +286,57 @@ const Panel = () => {
 
   // Clear active tab
   const handleClear = () => {
-    setTabs(prev =>
-      prev.map(t =>
+    setTabs(prev => {
+      // Compute the new name based on tabs AFTER clearing this one
+      const clearedTabs = prev.map(t =>
         t.id === activeTabId
           ? {
             ...t,
-            name: getNextTabDefaultName(),
+            name: '', // temporarily empty to exclude from name calculation
             userRenamed: false,
             inputs: { requestType: 'fetch', options: {}, editorLeft: '', editorRight: '' },
             outputs: {},
           }
           : t,
-      ),
-    );
+      );
+      const newName = getNextTabDefaultName(clearedTabs);
+      
+      // Now set the actual name
+      return clearedTabs.map(t =>
+        t.id === activeTabId ? { ...t, name: newName } : t,
+      );
+    });
     if (ref.current) ref.current.innerText = '';
   };
 
   // Add new tab
   const handleAddTab = () => {
-    const newTab: Tab = {
-      id: crypto.randomUUID(),
-      name: getNextTabDefaultName(),
-      inputs: { requestType: 'fetch', options: {}, editorLeft: '', editorRight: '' },
-      outputs: {},
-    };
-    setTabs(prev => [...prev, newTab]);
-    setActiveTabId(newTab.id);
+    const newTabId = crypto.randomUUID();
+    setTabs(prev => {
+      const newTab: Tab = {
+        id: newTabId,
+        name: getNextTabDefaultName(prev),
+        inputs: { requestType: 'fetch', options: {}, editorLeft: '', editorRight: '' },
+        outputs: {},
+      };
+      return [...prev, newTab];
+    });
+    setActiveTabId(newTabId);
   };
 
   // Close tab; if only one tab remains, replace with a fresh TabN
   const handleCloseTab = (tabId: string) => {
     if (tabs.length <= 1) {
-      const newTab: Tab = {
-        id: crypto.randomUUID(),
-        name: getNextTabDefaultName(),
-        inputs: { requestType: 'fetch', options: {}, editorLeft: '', editorRight: '' },
-        outputs: {},
-      };
-      setTabs([newTab]);
-      setActiveTabId(newTab.id);
+      setTabs(prev => {
+        const newTab: Tab = {
+          id: crypto.randomUUID(),
+          name: getNextTabDefaultName([]),
+          inputs: { requestType: 'fetch', options: {}, editorLeft: '', editorRight: '' },
+          outputs: {},
+        };
+        setActiveTabId(newTab.id);
+        return [newTab];
+      });
       return;
     }
     const remaining = tabs.filter(t => t.id !== tabId);
