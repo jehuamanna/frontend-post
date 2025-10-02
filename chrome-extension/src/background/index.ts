@@ -32,7 +32,7 @@ const getCookiesForUrl = async (urlString: string): Promise<string[]> => {
 // Interface for fetch execution results
 interface FetchResult {
   body: string;
-  headers: string;
+  headers: Record<string, string | string[]>;
   cookies: string[];
   statusCode: number | null;
 }
@@ -46,7 +46,7 @@ const executeFetch = async (fetchUrl: string, headersAndCookies: unknown): Promi
     if (!url) {
       return {
         body: 'Error: URL is required',
-        headers: '',
+        headers: {},
         cookies: [],
         statusCode: null,
       };
@@ -64,7 +64,7 @@ const executeFetch = async (fetchUrl: string, headersAndCookies: unknown): Promi
       const errorMessage = err instanceof Error ? err.message : 'Unknown error parsing JSON';
       return {
         body: `Error parsing fetch options: ${errorMessage}`,
-        headers: '',
+        headers: {},
         cookies: [],
         statusCode: null,
       };
@@ -117,7 +117,7 @@ const executeFetch = async (fetchUrl: string, headersAndCookies: unknown): Promi
 
     return {
       body,
-      headers: JSON.stringify(enhancedHeaders, null, 2),
+      headers: enhancedHeaders,
       cookies,
       statusCode,
     };
@@ -125,7 +125,7 @@ const executeFetch = async (fetchUrl: string, headersAndCookies: unknown): Promi
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return {
       body: `Error executing fetch: ${errorMessage}`,
-      headers: '',
+      headers: {},
       cookies: [],
       statusCode: null,
     };

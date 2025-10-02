@@ -258,6 +258,15 @@ const Panel = () => {
             +
           </button>
         </div>
+        {/* Action buttons */}
+        <div className="mt-4 flex flex-row items-center space-x-2">
+          <Button onClick={handleClear} variant="outline" className="whitespace-nowrap">
+            Clear
+          </Button>
+          <Button onClick={handleExecute} variant="outline" className="whitespace-nowrap">
+            Execute
+          </Button>
+        </div>
         <div>
           {/* Editors Row */}
           <div className="p-4">
@@ -286,18 +295,7 @@ const Panel = () => {
               </div>
             </div>
 
-            {/* Action buttons */}
-            <div className="mt-4 flex flex-row items-center space-x-2">
-              <Button onClick={handleClear} variant="outline" className="whitespace-nowrap">
-                Clear
-              </Button>
-              <Button onClick={handleExecute} variant="outline" className="whitespace-nowrap">
-                Execute
-              </Button>
-              <Button onClick={handleInjectAndExecute} variant="outline" className="whitespace-nowrap">
-                Inject & Execute
-              </Button>
-            </div>
+
           </div>
         </div>
       </div>
