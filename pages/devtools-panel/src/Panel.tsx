@@ -240,26 +240,27 @@ const Panel = () => {
   };
 
   return (
-    <div className="h-vh w-wh max-h-[100v] max-w-[100vw]">
-      <div className="rounded-lg border border-gray-200 shadow-sm">
-        {/* Tab Bar */}
-        <div className="flex items-center border-b border-gray-200">
+    <div className="h-screen w-screen max-h-screen max-w-screen flex flex-col">
+      <div className="flex flex-col rounded-lg border border-gray-200 shadow-sm flex-1 min-h-0">
+        {/* Top Bar: Tabs */}
+        <div className="flex items-center border-b border-gray-200 px-2 py-1">
           <div className="flex space-x-1 overflow-x-auto">
             {tabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTabId(tab.id)}
-                className={`border px-4 py-2 ${activeTabId === tab.id ? 'bg-gray-100' : 'bg-white'}`}>
+                className={`border px-3 py-1 text-sm ${activeTabId === tab.id ? 'bg-gray-100' : 'bg-white'}`}>
                 {tab.name}
               </button>
             ))}
           </div>
-          <button onClick={handleAddTab} className="ml-1 rounded-lg border px-4 py-2">
+          <button onClick={handleAddTab} className="ml-1 rounded-lg border px-3 py-1 text-sm">
             +
           </button>
         </div>
-        {/* Action buttons */}
-        <div className="mt-4 flex flex-row items-center space-x-2">
+
+        {/* Action Bar */}
+        <div className="flex items-center gap-2 px-2 py-2 border-b border-gray-200">
           <Button onClick={handleClear} variant="outline" className="whitespace-nowrap">
             Clear
           </Button>
@@ -267,36 +268,45 @@ const Panel = () => {
             Execute
           </Button>
         </div>
-        <div>
-          {/* Editors Row */}
-          <div className="p-4">
-            <div className="grid grid-cols-2 gap-4">
-              {/* Left monaco editor */}
-              <div className="flex flex-col">
-                <div className="mb-2 text-sm font-medium text-gray-700">Request</div>
+
+        {/* Editors Area */}
+        <div className="flex-1 min-h-0 p-3">
+          <div className="grid grid-cols-2 gap-3 h-full">
+            {/* Left monaco editor */}
+            <div className="flex flex-col h-full min-h-0">
+              <div className="mb-2 text-sm font-medium text-gray-700">Request</div>
+              <div className="flex-1 min-h-0">
                 <CodeEditor
                   value={activeTab?.inputs.editorLeft ?? ''}
                   onChange={val => updateTabInput(activeTabId, 'editorLeft', val)}
                   language={leftEditorLanguage}
                   onCtrlEnter={handleExecute}
-                  height={280}
+                  height="100%"
+                  className="flex-1 min-h-0"
                 />
               </div>
-              {/* Right monaco editor */}
-              <div className="flex flex-col">
-                <div className="mb-2 text-sm font-medium text-gray-700">Response</div>
+            </div>
+            {/* Right monaco editor */}
+            <div className="flex flex-col h-full min-h-0">
+              <div className="mb-2 text-sm font-medium text-gray-700">Response</div>
+              <div className="flex-1 min-h-0">
                 <CodeEditor
                   value={rightEditorPrettyValue}
                   onChange={val => updateTabInput(activeTabId, 'editorRight', val)}
                   language="json"
                   readOnly={true}
-                  height={280}
+                  height="100%"
+                  className="flex-1 min-h-0"
                 />
               </div>
             </div>
-
-
           </div>
+        </div>
+
+        {/* Footer */}
+        <div className="h-8 border-t border-gray-200 px-3 text-xs text-gray-500 flex items-center justify-between">
+          <span>DevTools Request Runner</span>
+          <span>Ctrl/Cmd + Enter to Execute</span>
         </div>
       </div>
     </div>

@@ -53,7 +53,7 @@ interface CodeEditorProps {
   readOnly?: boolean;
 }
 
-const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, language = 'plaintext', height = '300px', className = '', onCtrlEnter, readOnly = false }) => {
+const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, language = 'plaintext', height = '100%', className = '', onCtrlEnter, readOnly = false }) => {
   const memoHeight = useMemo(() => (typeof height === 'number' ? `${height}px` : height), [height]);
 
   const handleMount = (
@@ -74,7 +74,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, language = 'pl
       language={language}
       value={value}
       onChange={(val: string | undefined) => onChange(val ?? '')}
-      theme="vs-dark"
+      theme="vs-light"
       onMount={handleMount}
       loading={<div className="p-2 text-xs text-gray-400">Loading editor…</div>}
       options={{
@@ -88,6 +88,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, language = 'pl
         tabSize: 2,
         bracketPairColorization: { enabled: true },
         guides: { bracketPairs: true },
+        lineNumbers: 'on',
         readOnly,
       }}
       className={className}
