@@ -1,3 +1,5 @@
+import { parseCurlAdvanced } from '../lib/curlToFetch';
+
 type UseFetchParserReturn = {
   extractHttpMethod: (fetchCode: string) => string | undefined;
   extractUrlPath: (fetchCode: string) => string | null;
@@ -27,52 +29,12 @@ export const useFetchParser = (): UseFetchParserReturn => {
     return 'plaintext';
   };
 
+  // Use robust curl parser from lib
+  // Import placed at top-level to satisfy module resolution
+  // Note: Type import at top of file is not needed here; we only consume function output
   const parseCurl = (curlCommand: string): { url: string; options: Record<string, unknown> } => {
-    // --- Extract URL ---
-    const urlMatch = curlCommand.match(/curl\s+['"]?([^\s'"\\]+)['"]?/i);
-    const url = urlMatch ? urlMatch[1] : '';
-
-    // --- Extract method ---
-    const methodMatch = curlCommand.match(/-X\s+(\w+)/i);
-    const method = (methodMatch ? methodMatch[1] : 'GET').toUpperCase();
-
-    // --- Extract headers ---
-    const headers: Record<string, string> = {};
-    const headerRegex = /-H\s+['"]?([^:'"]+):\s*([^'"\n]+)['"]?/gi;
-    let m: RegExpExecArray | null;
-    while ((m = headerRegex.exec(curlCommand)) !== null) {
-      headers[m[1].trim().toLowerCase()] = m[2].trim();
-    }
-
-    // --- Extract referrer ---
-    let referrer: string | undefined = undefined;
-    if (headers['referer']) {
-      referrer = headers['referer'];
-      delete headers['referer'];
-    }
-
-    // --- Extract cookies ---
-    const cookieMatch = curlCommand.match(/-b\s+['"]([^'"]+)['"]/i);
-    const hasCookies = !!cookieMatch;
-    if (cookieMatch) {
-      headers['cookie'] = cookieMatch[1];
-    }
-
-    // --- Extract body ---
-    const dataMatch = curlCommand.match(/--data(?:-raw)?\s+['"]([^'"]+)['"]|-d\s+['"]([^'"]+)['"]/i);
-    const body = dataMatch ? (dataMatch[1] || dataMatch[2]) : null;
-
-    // --- Build fetch options ---
-    const fetchOptions: Record<string, unknown> = {
-      method,
-      headers,
-      ...(body ? { body } : {}),
-      mode: 'cors',
-      ...(referrer ? { referrer } : {}),
-      ...(hasCookies ? { credentials: 'include' } : {}),
-    };
-
-    return { url, options: fetchOptions };
+    const parsed = parseCurlAdvanced(String(curlCommand || ''));
+    return { url: parsed.url, options: parsed.options };
   };
   /**
    * Extract HTTP method from fetch code
@@ -81,7 +43,7 @@ export const useFetchParser = (): UseFetchParserReturn => {
     try {
       if (isCurl(fetchCode)) {
         const { options } = parseCurl(fetchCode);
-        const m = String(options.method ?? 'GET').toUpperCase();
+        const m = String((options as any).method ?? 'GET').toUpperCase();
         return m;
       }
       const methodMatch = fetchCode.match(/method["']?:\s*["']([A-Z]+)["']/i);
