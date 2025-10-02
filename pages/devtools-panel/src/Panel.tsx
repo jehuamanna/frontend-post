@@ -14,7 +14,7 @@ import type { Tab } from './types';
 
 const Panel = () => {
   const { tabs, setTabs } = useTabs();
-  const { extractHttpMethod, extractUrlPath, extractFetchDetails } = useFetchParser();
+  const { extractHttpMethod, extractUrlPath, extractFetchDetails, detectLanguage } = useFetchParser();
   const { executeFetch } = useFetchExecutor();
   console.log('tabs--------------:', tabs[0]?.id);
   const [activeTabId, setActiveTabId] = useState<string>(tabs[0]?.id ?? '');
@@ -138,11 +138,8 @@ const Panel = () => {
   // Determine language for left editor based on content
   const leftEditorLanguage = useMemo(() => {
     const text = activeTab?.inputs.editorLeft ?? '';
-    const t = text.trim();
-    if (/^curl\s/i.test(t)) return 'bash';
-    if (/(\bfetch\s*\(|\baxios\s*\(|\basync\s+function|\.then\(|\bawait\s+fetch\s*\()/i.test(t)) return 'javascript';
-    return 'plaintext';
-  }, [activeTab?.inputs.editorLeft]);
+    return detectLanguage(text);
+  }, [activeTab?.inputs.editorLeft, detectLanguage]);
 
   // Pretty JSON for right editor display, but don't alter stored value
   const rightEditorPrettyValue = useMemo(() => {
@@ -155,6 +152,18 @@ const Panel = () => {
       return raw; // if not JSON, show as-is
     }
   }, [activeTab?.inputs.editorRight]);
+
+  // Auto-detect right editor language: json if valid, otherwise plaintext
+  const rightEditorLanguage = useMemo(() => {
+    const text = rightEditorPrettyValue ?? '';
+    if (!text) return 'plaintext';
+    try {
+      JSON.parse(text);
+      return 'json';
+    } catch {
+      return 'plaintext';
+    }
+  }, [rightEditorPrettyValue]);
 
   // Clear active tab
   const handleClear = () => {
@@ -293,7 +302,7 @@ const Panel = () => {
                 <CodeEditor
                   value={rightEditorPrettyValue}
                   onChange={val => updateTabInput(activeTabId, 'editorRight', val)}
-                  language="json"
+                  language={rightEditorLanguage}
                   readOnly={true}
                   height="100%"
                   className="flex-1 min-h-0"

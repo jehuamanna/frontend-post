@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import Editor from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import * as MonacoAPI from 'monaco-editor/esm/vs/editor/editor.api';
+// Register language tokenizers/contributions to enable syntax colors
 // Import worker asset URLs (no blob:) and construct Workers manually to satisfy CSP
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -55,6 +56,11 @@ interface CodeEditorProps {
 
 const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, language = 'plaintext', height = '100%', className = '', onCtrlEnter, readOnly = false }) => {
   const memoHeight = useMemo(() => (typeof height === 'number' ? `${height}px` : height), [height]);
+  // Normalize language ids to Monaco's registered languages
+  const normalizedLanguage = useMemo(() => {
+    if (language === 'bash') return 'shell';
+    return language;
+  }, [language]);
 
   const handleMount = (
     editor: Monaco.editor.IStandaloneCodeEditor,
@@ -71,7 +77,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, language = 'pl
   return (
     <Editor
       height={memoHeight}
-      language={language}
+      language={normalizedLanguage}
       value={value}
       onChange={(val: string | undefined) => onChange(val ?? '')}
       theme="vs-light"
@@ -88,6 +94,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ value, onChange, language = 'pl
         tabSize: 2,
         bracketPairColorization: { enabled: true },
         guides: { bracketPairs: true },
+        'semanticHighlighting.enabled': true,
         lineNumbers: 'on',
         readOnly,
       }}

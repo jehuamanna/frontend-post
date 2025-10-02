@@ -2,13 +2,30 @@ type UseFetchParserReturn = {
   extractHttpMethod: (fetchCode: string) => string | undefined;
   extractUrlPath: (fetchCode: string) => string | null;
   extractFetchDetails: (fetchCode: string) => { url: string | null; options: string | null };
+  isCurl: (text: string) => boolean;
+  isFetch: (text: string) => boolean;
+  isJson: (text: string) => boolean;
+  detectLanguage: (text: string) => 'bash' | 'javascript' | 'json' | 'plaintext';
 };
 
 /**
  * Custom hook for parsing fetch commands
  */
 export const useFetchParser = (): UseFetchParserReturn => {
-  const isCurl = (text: string) => /^\s*curl\b/i.test(text.trim());
+  const isCurl = (text: string) => /^\s*curl\b/i.test((text ?? '').trim());
+  const isFetch = (text: string) => /(\bfetch\s*\(|\baxios\s*\(|\bawait\s+fetch\s*\(|\.then\s*\()/i.test(text ?? '');
+  const isJson = (text: string) => {
+    const t = (text ?? '').trim();
+    if (!t) return false;
+    if (!((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']')))) return false;
+    try { JSON.parse(t); return true; } catch { return false; }
+  };
+  const detectLanguage = (text: string): 'bash' | 'javascript' | 'json' | 'plaintext' => {
+    if (isCurl(text)) return 'bash';
+    if (isFetch(text)) return 'javascript';
+    if (isJson(text)) return 'json';
+    return 'plaintext';
+  };
 
   const parseCurl = (curlCommand: string): { url: string; options: Record<string, unknown> } => {
     // --- Extract URL ---
@@ -185,5 +202,9 @@ export const useFetchParser = (): UseFetchParserReturn => {
     extractHttpMethod,
     extractUrlPath,
     extractFetchDetails,
+    isCurl,
+    isFetch,
+    isJson,
+    detectLanguage,
   };
 };
