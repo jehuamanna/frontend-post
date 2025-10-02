@@ -40,7 +40,7 @@ interface FetchResult {
 /**
  * Execute a fetch request and return the results
  */
-const executeFetch = async (fetchUrl: string, headersAndCookies: string): Promise<FetchResult> => {
+const executeFetch = async (fetchUrl: string, headersAndCookies: unknown): Promise<FetchResult> => {
   try {
     const url = fetchUrl.trim();
     if (!url) {
@@ -54,8 +54,11 @@ const executeFetch = async (fetchUrl: string, headersAndCookies: string): Promis
 
     let options: RequestInit = {};
     try {
-      if (headersAndCookies.trim()) {
-        options = JSON.parse(headersAndCookies);
+      if (typeof headersAndCookies === 'string') {
+        const s = headersAndCookies.trim();
+        if (s) options = JSON.parse(s);
+      } else if (headersAndCookies && typeof headersAndCookies === 'object') {
+        options = headersAndCookies as RequestInit;
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error parsing JSON';

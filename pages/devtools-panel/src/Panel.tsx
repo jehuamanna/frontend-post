@@ -184,9 +184,27 @@ const Panel = () => {
     const rawText = activeTab?.inputs.editorLeft ?? '';
     const details = extractFetchDetails(rawText);
     const url = details.url ?? '';
-    const rawOpts = activeTab?.inputs.options ?? details.options ?? '';
-    const optionsObj =
-      typeof rawOpts === 'string' ? (looseRecursiveJSONParse(rawOpts) as unknown as RequestInit) : ((rawOpts ?? {}) as RequestInit);
+    // Build options by merging parsed options from the request text with any stored options
+    // If stored options is an empty object, prefer parsed options
+    const storedOptsRaw = activeTab?.inputs.options;
+    const parsedOptsRaw = details.options ?? '';
+
+    const parsedOpts: RequestInit = typeof parsedOptsRaw === 'string'
+      ? ((parsedOptsRaw ? (looseRecursiveJSONParse(parsedOptsRaw) as unknown as RequestInit) : {}) as RequestInit)
+      : ((parsedOptsRaw ?? {}) as RequestInit);
+
+    const storedOpts: RequestInit = typeof storedOptsRaw === 'string'
+      ? ((storedOptsRaw ? (looseRecursiveJSONParse(storedOptsRaw) as unknown as RequestInit) : {}) as RequestInit)
+      : ((storedOptsRaw ?? {}) as RequestInit);
+
+    const isEmptyObject = (o: unknown) => !!o && typeof o === 'object' && Object.keys(o as Record<string, unknown>).length === 0;
+    const base: RequestInit = isEmptyObject(storedOpts) ? parsedOpts : parsedOpts;
+    const optionsObj: RequestInit = { ...base, ...storedOpts };
+    if (!url) {
+      console.warn(
+        '[Devtools Panel] No valid URL parsed from the Request editor. Executor will return an error body and statusCode: null; the Response editor will still display the error payload.'
+      );
+    }
     const response = await executeFetch(url, optionsObj);
     updateTabOutput(activeTabId, 'statusCode', response.statusCode?.toString() ?? '');
     // Store the entire response payload as a JSON string in the right editor
@@ -246,21 +264,7 @@ const Panel = () => {
             <div className="grid grid-cols-2 gap-4">
               {/* Left monaco editor */}
               <div className="flex flex-col">
-                <div className="mb-2 text-sm font-medium text-gray-700">Left Editor</div>
-                <div className="mb-2 flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => updateTabInput(activeTabId, 'editorLeft', (activeTab?.inputs.editorLeft ?? '') + (activeTab?.inputs.editorLeft ? '\n' : '') + 'curl https://api.example.com/resource -H "Accept: application/json"')}
-                  >
-                    Insert CURL
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => updateTabInput(activeTabId, 'editorLeft', (activeTab?.inputs.editorLeft ?? '') + (activeTab?.inputs.editorLeft ? '\n\n' : '') + 'fetch("https://api.example.com/resource", {\n  method: "GET",\n  headers: { "Accept": "application/json" }\n});')}
-                  >
-                    Insert Fetch
-                  </Button>
-                </div>
+                <div className="mb-2 text-sm font-medium text-gray-700">Request</div>
                 <CodeEditor
                   value={activeTab?.inputs.editorLeft ?? ''}
                   onChange={val => updateTabInput(activeTabId, 'editorLeft', val)}
@@ -271,7 +275,7 @@ const Panel = () => {
               </div>
               {/* Right monaco editor */}
               <div className="flex flex-col">
-                <div className="mb-2 text-sm font-medium text-gray-700">Right Editor</div>
+                <div className="mb-2 text-sm font-medium text-gray-700">Response</div>
                 <CodeEditor
                   value={rightEditorPrettyValue}
                   onChange={val => updateTabInput(activeTabId, 'editorRight', val)}
