@@ -74,7 +74,7 @@ export const useFetchExecutor = () => {
           statusCode: null,
         };
       }
-      
+
       // Check if port is established
       if (!portRef.current) {
         return {
@@ -87,7 +87,7 @@ export const useFetchExecutor = () => {
 
       // Generate a unique request ID
       const requestId = `${url}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-      
+
       // Create a promise that will be resolved when we receive a response
       const requestPromise = new Promise<FetchResult>((resolve, reject) => {
         pendingRequestsRef.current.set(requestId, { resolve, reject });

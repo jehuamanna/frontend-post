@@ -8,6 +8,27 @@ exampleThemeStorage.get().then(theme => {
 console.log('Background loaded');
 console.log("Edit 'chrome-extension/src/background/index.ts' and save to reload.");
 
+/**
+ * Directly retrieve cookies for a URL
+ */
+const getCookiesForUrl = async (urlString: string): Promise<string[]> => {
+  try {
+    const url = new URL(urlString);
+    const cookies = await chrome.cookies.getAll({ domain: url.hostname });
+
+    if (cookies.length > 0) {
+      // Format cookies as Set-Cookie headers for consistency with HTTP responses
+      return cookies.map(
+        cookie => `${cookie.name}=${cookie.value}; Domain=${cookie.domain}; Path=${cookie.path}${cookie.secure ? '; Secure' : ''}${cookie.httpOnly ? '; HttpOnly' : ''}`
+      );
+    }
+    return [];
+  } catch (error) {
+    console.error('Error retrieving cookies for URL:', urlString, error);
+    return [];
+  }
+};
+
 // Interface for fetch execution results
 interface FetchResult {
   body: string;
@@ -36,9 +57,10 @@ const executeFetch = async (fetchUrl: string, headersAndCookies: string): Promis
       if (headersAndCookies.trim()) {
         options = JSON.parse(headersAndCookies);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error parsing JSON';
       return {
-        body: `Error parsing fetch options: ${err.message}`,
+        body: `Error parsing fetch options: ${errorMessage}`,
         headers: '',
         cookies: [],
         statusCode: null,
@@ -61,8 +83,12 @@ const executeFetch = async (fetchUrl: string, headersAndCookies: string): Promis
       });
     }
 
-    // In the background script we might not have access to extractCookiesFromRawHeaders
-    // So we'll just rely on the headers collection
+    // Get cookies directly using the cookies API
+    const siteCookies = await getCookiesForUrl(url);
+    if (siteCookies.length > 0) {
+      console.log('Found cookies for URL:', url, siteCookies);
+      cookies = siteCookies;
+    }
 
     // Ensure Set-Cookie header is visible
     if (cookies.length > 0) {
@@ -92,9 +118,10 @@ const executeFetch = async (fetchUrl: string, headersAndCookies: string): Promis
       cookies,
       statusCode,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return {
-      body: `Error executing fetch: ${error.message}`,
+      body: `Error executing fetch: ${errorMessage}`,
       headers: '',
       cookies: [],
       statusCode: null,
@@ -117,10 +144,11 @@ chrome.runtime.onConnect.addListener(port => {
             result,
             requestId: message.requestId, // Pass back the requestId for request matching
           });
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred during fetch';
           port.postMessage({
             type: 'FETCH_ERROR',
-            error: error.message || 'Unknown error occurred during fetch',
+            error: errorMessage,
             requestId: message.requestId, // Pass back the requestId even for errors
           });
         }

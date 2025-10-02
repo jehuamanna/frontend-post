@@ -2,4 +2,5 @@
 trigger: manual
 ---
 
-Use only arrow function
+* Use only arrow function
+* Dont fix "any" type errors.
