@@ -304,12 +304,12 @@ const Panel = () => {
       prev.map(t =>
         t.id === activeTabId
           ? {
-              ...t,
-              name: getNextTabDefaultName(),
-              userRenamed: false,
-              inputs: { requestType: 'fetch', options: {}, editorLeft: '', editorRight: '' },
-              outputs: {},
-            }
+            ...t,
+            name: getNextTabDefaultName(),
+            userRenamed: false,
+            inputs: { requestType: 'fetch', options: {}, editorLeft: '', editorRight: '' },
+            outputs: {},
+          }
           : t,
       ),
     );
