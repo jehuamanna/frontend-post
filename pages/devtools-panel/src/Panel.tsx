@@ -481,7 +481,24 @@ const Panel = () => {
         {/* Footer */}
         <div className="h-8 border-t border-gray-200 px-3 text-xs text-gray-500 flex items-center justify-between">
           <span>DevTools Request Runner</span>
-          <span>Ctrl/Cmd + Enter to Execute</span>
+          {activeTab?.outputs?.statusCode ? (
+            <span
+              className={`px-2 py-0.5 rounded border font-medium ${(() => {
+                const code = parseInt(activeTab?.outputs?.statusCode ?? '', 10);
+                if (!isFinite(code)) return 'bg-gray-50 text-gray-600 border-gray-200';
+                if (code >= 200 && code < 300) return 'bg-green-100 text-green-700 border-green-300';
+                if (code >= 300 && code < 400) return 'bg-blue-100 text-blue-700 border-blue-300';
+                if (code >= 400 && code < 500) return 'bg-amber-100 text-amber-700 border-amber-300';
+                if (code >= 500) return 'bg-red-100 text-red-700 border-red-300';
+                return 'bg-gray-50 text-gray-600 border-gray-200';
+              })()}`}
+              title="HTTP response status code"
+            >
+              {activeTab.outputs.statusCode}
+            </span>
+          ) : (
+            <span>Ctrl/Cmd + Enter to Execute</span>
+          )}
         </div>
       </div>
     </div>

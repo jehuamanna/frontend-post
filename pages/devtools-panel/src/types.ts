@@ -11,6 +11,6 @@ export type Tab = {
     editorRight?: string;
   };
   outputs: {
-    statusCode?: number;
+    statusCode?: string;
   };
 };
