@@ -1,9 +1,10 @@
 // JSONLineEditor.tsx
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 interface Props {
   jsonString: string;
   className?: string;
+  onChange?: (newJson: string) => void;
 }
 
 /**
@@ -13,8 +14,12 @@ interface Props {
  * - White/grey theme
  * - Click line to inspect key/value
  */
-export default function JSONLineEditor({ jsonString = '', className = '' }: Props) {
+export default function JSONLineEditor({ jsonString = '', className = '', onChange }: Props) {
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [text, setText] = useState<string>('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [toastTimer, setToastTimer] = useState<number | null>(null);
 
   // Format JSON with indentation; fallback to raw
   const formatted = useMemo(() => {
@@ -26,99 +31,123 @@ export default function JSONLineEditor({ jsonString = '', className = '' }: Prop
     }
   }, [jsonString]);
 
+  // Keep local editable text in sync when not editing
+  useEffect(() => {
+    if (!isEditing) setText(formatted);
+  }, [formatted, isEditing]);
+
   const lines = useMemo(() => formatted.split(/\r?\n/), [formatted]);
 
-  // Regex: detect "key": value
-  const extractKeyValue = (lineText: string) => {
-    const kvRegex = /^\s*"([^"]+)"\s*:\s*(.+?)(,?\s*)$/;
-    const m = lineText.match(kvRegex);
-    if (!m) return null;
-    const [, key, rawValue] = m;
-    const value = rawValue.replace(/,\s*$/, '').trim();
-    return { key, value };
+  const showToast = (message: string, type: 'success' | 'error' = 'success', duration = 1800) => {
+    setToast({ message, type });
+    if (toastTimer) {
+      window.clearTimeout(toastTimer);
+    }
+    const id = window.setTimeout(() => setToast(null), duration);
+    setToastTimer(id);
   };
 
-  const selectedInfo =
-    selectedLine != null
-      ? {
-          lineNumber: selectedLine + 1,
-          text: lines[selectedLine],
-          kv: extractKeyValue(lines[selectedLine]),
-        }
-      : null;
+  const handleExitEdit = () => {
+    // Try to parse and pretty-print; keep raw if invalid
+    let next = text;
+    let parsedOk = true;
+    try {
+      const parsed = JSON.parse(text);
+      next = JSON.stringify(parsed, null, 2);
+    } catch {
+      // leave as-is if not valid JSON
+      parsedOk = false;
+    }
+    // Debug: confirm save firing on blur
+    try { console.debug('[JSONViewer] Saving JSON on blur'); } catch {}
+    setText(next);
+    setIsEditing(false);
+    if (onChange) onChange(next);
+    // Toast feedback
+    if (parsedOk) {
+      showToast('Saved', 'success');
+    } else {
+      showToast('Parse error: saved as plain text', 'error');
+    }
+  };
+
+  const handleKeyDownEdit: React.KeyboardEventHandler<HTMLTextAreaElement> = e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      handleExitEdit();
+    }
+    // ESC to cancel edits and revert to formatted
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setText(formatted);
+      setIsEditing(false);
+    }
+  };
 
   return (
     <div className={`w-full max-w-full ${className}`}>
       {/* Main viewer */}
-      <div className="overflow-auto rounded border border-gray-200 bg-white shadow-sm" style={{ maxHeight: '60vh' }}>
-        <div className="flex text-left font-mono text-xs leading-snug">
-          {/* Line numbers */}
-          <div className="select-none border-r border-gray-100 text-gray-500" style={{ minWidth: 40 }}>
-            {lines.map((_, i) => (
-              <div
-                key={i}
-                className={`px-2 py-[1px] ${selectedLine === i ? 'bg-gray-100' : ''}`}
-                onClick={() => setSelectedLine(i)}
-                onKeyDown={e => e.key === 'Enter' && setSelectedLine(i)}
-                role="button"
-                tabIndex={0}
-                aria-label={`Select line ${i + 1}`}>
-                {i + 1}
-              </div>
-            ))}
-          </div>
-
-          {/* JSON code */}
-          <div className="flex-1">
+      <div className="relative overflow-auto rounded border border-gray-200 bg-white shadow-sm" style={{ maxHeight: '60vh' }}>
+        {!isEditing ? (
+          <div
+            className="text-left font-mono text-xs leading-snug"
+            onDoubleClick={() => setIsEditing(true)}
+            role="button"
+            tabIndex={0}
+            aria-label="Double click to edit JSON"
+          >
             {lines.map((line, i) => (
               <div
                 key={i}
-                className={`cursor-pointer whitespace-pre px-2 py-[1px] text-gray-800 ${
-                  selectedLine === i ? 'bg-gray-50' : ''
-                }`}
+                className={`flex items-start ${selectedLine === i ? 'bg-gray-50' : ''}`}
                 onClick={() => setSelectedLine(i)}
                 onKeyDown={e => e.key === 'Enter' && setSelectedLine(i)}
                 role="button"
                 tabIndex={0}
-                aria-label={`Select line ${i + 1}`}>
-                {line}
+                aria-label={`Select line ${i + 1}`}
+              >
+                {/* Line number */}
+                <div className={`select-none border-r border-gray-100 px-2 py-[1px] text-gray-500 ${selectedLine === i ? 'bg-gray-100' : ''}`} style={{ minWidth: 40 }}>
+                  {i + 1}
+                </div>
+                {/* Content with word wrap */}
+                <div className="flex-1 whitespace-pre-wrap break-words px-2 py-[1px] text-gray-800">
+                  {line}
+                </div>
               </div>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* Inspector */}
-      <div className="mt-2 font-sans text-xs">
-        {selectedInfo ? (
-          <div className="rounded border border-gray-100 bg-white p-2 text-gray-700">
-            <div className="mb-1 text-xs text-gray-500">Line {selectedInfo.lineNumber}</div>
-
-            <div className="mb-1">
-              <div className="break-words rounded border border-gray-50 bg-gray-50 p-1 font-mono text-xs">
-                {selectedInfo.text}
-              </div>
-            </div>
-
-            {selectedInfo.kv ? (
-              <div className="flex flex-col gap-1 text-xs">
-                <div className="flex items-center">
-                  <span className="mr-2 text-gray-500">Key:</span>
-                  <span className="font-mono">{selectedInfo.kv.key}</span>
-                </div>
-                <div className="flex items-start">
-                  <span className="mr-2 text-gray-500">Value:</span>
-                  <pre className="m-0 whitespace-pre-wrap break-words font-mono">{selectedInfo.kv.value}</pre>
-                </div>
-              </div>
-            ) : (
-              <div className="text-xs text-gray-500">No key/value detected on this line.</div>
-            )}
-          </div>
         ) : (
-          <div className="text-xs text-gray-500">Click a line to inspect key/value.</div>
+          <div className="p-2">
+            <textarea
+              className="h-[56vh] w-full resize-none rounded border border-gray-200 bg-white p-2 font-mono text-xs leading-snug outline-none whitespace-pre-wrap break-words"
+              value={text}
+              onChange={e => setText(e.target.value)}
+              onBlur={handleExitEdit}
+              onKeyDown={handleKeyDownEdit}
+              autoFocus
+              spellCheck={false}
+              aria-label="JSON editor"
+            />
+            <div className="mt-1 flex items-center justify-start text-[10px] text-gray-500">
+              <div>Press Ctrl/Cmd+Enter to save. Esc to cancel. Blur to save.</div>
+            </div>
+          </div>
+        )}
+        {/* Toast */}
+        {toast && (
+          <div
+            className={`pointer-events-none absolute bottom-2 right-2 rounded px-2 py-1 text-[11px] shadow-sm ${
+              toast.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'
+            }`}
+            role="status"
+            aria-live="polite"
+          >
+            {toast.message}
+          </div>
         )}
       </div>
+      
     </div>
   );
 }

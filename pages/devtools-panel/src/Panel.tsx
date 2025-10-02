@@ -29,7 +29,7 @@ const Panel = () => {
 
   // Update tab input in context
   const updateTabInput = useCallback(
-    (tabId: string, field: string, value: string) => {
+    (tabId: string, field: string, value: any) => {
       setTabs(prev => prev.map(t => (t.id === tabId ? { ...t, inputs: { ...t.inputs, [`${field}`]: value } } : t)));
     },
     [setTabs],
@@ -113,7 +113,7 @@ const Panel = () => {
     updateTabOutput(activeTabId, 'cookies', response.cookies.join(', '));
   };
 
-  const handleInjectAndExecute = () => {};
+  const handleInjectAndExecute = () => { };
 
   const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
     console.log('Updated content:', e.currentTarget.innerText);
@@ -135,7 +135,7 @@ const Panel = () => {
   };
 
   return (
-    <div className="h-vh w-wh max-h-[100v] max-w-[100vw] px-4">
+    <div className="h-vh w-wh max-h-[100v] max-w-[100vw]">
       <div className="rounded-lg border border-gray-200 shadow-sm">
         {/* Tab Bar */}
         <div className="flex items-center border-b border-gray-200">
@@ -178,48 +178,48 @@ const Panel = () => {
                   <Maximize2 size={16} />
                 </button>
               </div>
-              {/* Modal editor */}{' '}
+              {/* Modal editor */}
               {modalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                  {' '}
+
                   <div className="flex h-3/4 w-3/4 flex-col rounded-lg bg-white shadow-lg">
-                    {' '}
-                    {/* Header */}{' '}
+
+                    {/* Header */}
                     <div className="flex items-center justify-between border-b p-3">
-                      {' '}
-                      <h2 className="text-lg font-semibold">Edit Content</h2>{' '}
+
+                      <h2 className="text-lg font-semibold">Edit Content</h2>
                       <button onClick={() => setModalOpen(false)} className="p-1 text-gray-500 hover:text-gray-700">
-                        {' '}
-                        <X size={20} />{' '}
-                      </button>{' '}
-                    </div>{' '}
-                    {/* Editable big editor */}{' '}
+
+                        <X size={20} />
+                      </button>
+                    </div>
+                    {/* Editable big editor */}
                     <div
                       contentEditable
                       suppressContentEditableWarning
                       onInput={e => setModalValue((e.target as HTMLDivElement).innerText)}
                       className="flex-1 overflow-y-auto p-4 outline-none"
                       data-placeholder={placeholder}>
-                      {' '}
-                      {modalValue}{' '}
-                    </div>{' '}
-                    {/* Footer */}{' '}
+
+                      {modalValue}
+                    </div>
+                    {/* Footer */}
                     <div className="flex justify-end gap-2 border-t p-3">
-                      {' '}
+
                       <button
                         onClick={() => setModalOpen(false)}
                         className="rounded-md bg-gray-100 px-4 py-2 text-gray-700 hover:bg-gray-200">
-                        {' '}
-                        Cancel{' '}
-                      </button>{' '}
+
+                        Cancel
+                      </button>
                       <button
                         onClick={handleSave}
                         className="rounded-md bg-gray-600 px-4 py-2 text-white hover:bg-gray-700">
-                        {' '}
-                        Save{' '}
-                      </button>{' '}
-                    </div>{' '}
-                  </div>{' '}
+
+                        Save
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
               {/* buttons */}
@@ -257,7 +257,12 @@ const Panel = () => {
 
               <div className="min-h-[200px] rounded-lg border border-gray-200 p-3">
                 <div className="text-center text-gray-700">
-                  <JSONViewer jsonString={JSON.stringify(activeTab?.inputs.options, null, 2)} />
+                  <JSONViewer
+                    jsonString={JSON.stringify(activeTab?.inputs.options ?? {}, null, 2)}
+                    onChange={newJson =>
+                      updateTabInput(activeTabId, 'options', looseRecursiveJSONParse(newJson ?? ''))
+                    }
+                  />
                 </div>
               </div>
             </div>
@@ -266,13 +271,19 @@ const Panel = () => {
             <div className="flex flex-col space-y-4">
               <div className="rounded-lg border border-gray-200 p-3">
                 <div className="text-center text-gray-700">
-                  <JSONViewer jsonString={activeTab?.outputs.body ?? ''} />
+                  <JSONViewer
+                    jsonString={activeTab?.outputs.body ?? ''}
+                    onChange={newJson => updateTabOutput(activeTabId, 'body', newJson ?? '')}
+                  />
                 </div>
               </div>
 
               <div className="min-h-[200px] rounded-lg border border-gray-200 p-3">
                 <div className="text-center text-gray-700">
-                  <JSONViewer jsonString={activeTab?.outputs.headers ?? ''} />
+                  <JSONViewer
+                    jsonString={activeTab?.outputs.headers ?? ''}
+                    onChange={newJson => updateTabOutput(activeTabId, 'headers', newJson ?? '')}
+                  />
                 </div>
               </div>
             </div>
