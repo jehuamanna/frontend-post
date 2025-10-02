@@ -9,6 +9,7 @@ import { withErrorBoundary, withSuspense } from '@extension/shared';
 import { ErrorDisplay, LoadingSpinner } from '@extension/ui';
 import { Maximize2, X } from 'lucide-react'; // expand icon
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import CodeEditor from './components/CodeEditor';
 import type { Tab } from './types';
 
 const Panel = () => {
@@ -52,7 +53,7 @@ const Panel = () => {
 
     const handleInput = () => {
       if (el.innerHTML === '<br>') el.innerHTML = '';
-      updateTabInput(activeTabId, 'command', el.innerText);
+      updateTabInput(activeTabId, 'editorLeft', el.innerText);
     };
 
     el.addEventListener('input', handleInput);
@@ -65,12 +66,12 @@ const Panel = () => {
     const el = ref.current;
     if (!el) return;
 
-    el.innerText = activeTab?.inputs.command || '';
+    el.innerText = activeTab?.inputs.editorLeft || '';
   }, [activeTabId, activeTab]);
 
   // Expand modal editor
   const handleExpand = () => {
-    const currentValue = ref.current?.innerText || activeTab?.inputs.url || '';
+    const currentValue = ref.current?.innerText || activeTab?.inputs.editorLeft || '';
     setModalValue(currentValue);
     setModalOpen(true);
   };
@@ -91,15 +92,14 @@ const Panel = () => {
 
   // Save modal content back to context
   const applyModalChanges = () => {
-    // Keep command in sync with modal text
+    // Keep editorLeft in sync with modal text
     if (ref.current) {
       ref.current.innerText = modalValue;
     }
-    updateTabInput(activeTabId, 'command', modalValue);
+    updateTabInput(activeTabId, 'editorLeft', modalValue);
 
-    // Parse URL and options from the edited content
+    // Parse options from the edited content (URL is derived at execute time)
     const details = extractFetchDetails(modalValue);
-    updateTabInput(activeTabId, 'url', details.url ?? '');
     updateTabInput(activeTabId, 'options', looseRecursiveJSONParse(details.options ?? ''));
   };
 
@@ -135,12 +135,33 @@ const Panel = () => {
     }
   }, [activeTab?.inputs.options]);
 
+  // Determine language for left editor based on content
+  const leftEditorLanguage = useMemo(() => {
+    const text = activeTab?.inputs.editorLeft ?? '';
+    const t = text.trim();
+    if (/^curl\s/i.test(t)) return 'bash';
+    if (/(\bfetch\s*\(|\baxios\s*\(|\basync\s+function|\.then\(|\bawait\s+fetch\s*\()/i.test(t)) return 'javascript';
+    return 'plaintext';
+  }, [activeTab?.inputs.editorLeft]);
+
+  // Pretty JSON for right editor display, but don't alter stored value
+  const rightEditorPrettyValue = useMemo(() => {
+    const raw = activeTab?.inputs.editorRight ?? '';
+    if (!raw) return '';
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return raw; // if not JSON, show as-is
+    }
+  }, [activeTab?.inputs.editorRight]);
+
   // Clear active tab
   const handleClear = () => {
     setTabs(prev =>
       prev.map(t =>
         t.id === activeTabId
-          ? { ...t, inputs: { url: '', command: '', requestType: 'fetch', options: {} }, outputs: {} }
+          ? { ...t, inputs: { requestType: 'fetch', options: {}, editorLeft: '', editorRight: '' }, outputs: {} }
           : t,
       ),
     );
@@ -152,7 +173,7 @@ const Panel = () => {
     const newTab: Tab = {
       id: crypto.randomUUID(),
       name: `Tab ${tabs.length + 1}`,
-      inputs: { url: '', command: '', requestType: 'fetch', options: {} },
+      inputs: { requestType: 'fetch', options: {}, editorLeft: '', editorRight: '' },
       outputs: {},
     };
     setTabs(prev => [...prev, newTab]);
@@ -160,14 +181,22 @@ const Panel = () => {
   };
 
   const handleExecute = async () => {
-    const rawOpts = activeTab?.inputs.options;
+    const rawText = activeTab?.inputs.editorLeft ?? '';
+    const details = extractFetchDetails(rawText);
+    const url = details.url ?? '';
+    const rawOpts = activeTab?.inputs.options ?? details.options ?? '';
     const optionsObj =
       typeof rawOpts === 'string' ? (looseRecursiveJSONParse(rawOpts) as unknown as RequestInit) : ((rawOpts ?? {}) as RequestInit);
-    const response = await executeFetch(activeTab?.inputs.url ?? '', optionsObj);
+    const response = await executeFetch(url, optionsObj);
     updateTabOutput(activeTabId, 'statusCode', response.statusCode?.toString() ?? '');
-    updateTabOutput(activeTabId, 'body', response.body);
-    updateTabOutput(activeTabId, 'headers', response.headers);
-    updateTabOutput(activeTabId, 'cookies', response.cookies.join(', '));
+    // Store the entire response payload as a JSON string in the right editor
+    const payload = {
+      statusCode: response.statusCode ?? null,
+      body: response.body ?? '',
+      headers: response.headers ?? {},
+      cookies: response.cookies ?? [],
+    };
+    updateTabInput(activeTabId, 'editorRight', JSON.stringify(payload, null, 2));
   };
 
   const handleInjectAndExecute = () => { };
@@ -184,8 +213,9 @@ const Panel = () => {
     console.log('url path:', extractUrlPath(text));
     const fetchDetails = extractFetchDetails(text);
     console.log('fetch details:', fetchDetails);
-    updateTabInput(activeTabId, 'url', fetchDetails.url ?? '');
-
+    // Store the full pasted content in the left editor
+    updateTabInput(activeTabId, 'editorLeft', text);
+    // And parse options alongside it
     updateTabInput(activeTabId, 'options', looseRecursiveJSONParse(fetchDetails.options ?? ''));
     console.log('dddddddddddddddddddd', tabs);
     console.log('active tab id:', activeTabId);
@@ -210,173 +240,59 @@ const Panel = () => {
             +
           </button>
         </div>
-
-        {/* Content Area */}
-        <div className="p-4">
-          {/* Top Input Area */}
-          <div className="mb-4 flex">
-            <div className="flex w-full items-start">
-              {/* editor */}
-              <div className="relative flex-1">
-                <div
-                  ref={ref}
-                  contentEditable
-                  onInput={handleInput}
-                  onPaste={handlePaste}
-                  suppressContentEditableWarning
-                  data-placeholder={placeholder}
-                  className="editable h-36 w-[400px] overflow-y-auto rounded-lg border border-gray-300 p-2 font-sans text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400"
-                />
-                {/* Expand button */}
-                <button
-                  type="button"
-                  onClick={handleExpand}
-                  className="absolute left-[410px] top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700">
-                  <Maximize2 size={16} />
-                </button>
-              </div>
-              {/* Modal editor */}
-              {modalOpen && (
-                <div
-                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-                  onMouseDown={e => {
-                    // Clicking backdrop: save & close
-                    if (e.currentTarget === e.target) {
-                      handleSave();
-                    }
-                  }}
-                >
-
-                  <div
-                    ref={modalPanelRef}
-                    className="relative flex h-3/4 w-3/4 flex-col rounded-lg bg-white shadow-lg"
-                    tabIndex={-1}
-                    onBlur={e => {
-                      // If focus moved outside the panel entirely, save & close
-                      const next = e.relatedTarget as Node | null;
-                      if (!e.currentTarget.contains(next)) {
-                        handleSave();
-                      }
-                    }}
+        <div>
+          {/* Editors Row */}
+          <div className="p-4">
+            <div className="grid grid-cols-2 gap-4">
+              {/* Left monaco editor */}
+              <div className="flex flex-col">
+                <div className="mb-2 text-sm font-medium text-gray-700">Left Editor</div>
+                <div className="mb-2 flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => updateTabInput(activeTabId, 'editorLeft', (activeTab?.inputs.editorLeft ?? '') + (activeTab?.inputs.editorLeft ? '\n' : '') + 'curl https://api.example.com/resource -H "Accept: application/json"')}
                   >
-
-                    {/* Header */}
-                    <div className="flex items-center justify-between border-b p-3">
-
-                      <h2 className="text-lg font-semibold">Edit Content</h2>
-                      <button onClick={handleSave} className="p-1 text-gray-500 hover:text-gray-700" title="Save & Close">
-                        
-                        <X size={20} />
-                      </button>
-                    </div>
-                    {/* Editable big editor */}
-                    <div className="flex-1 overflow-y-auto p-4">
-                      <JSONViewer
-                        jsonString={modalValue}
-                        onChange={val => setModalValue(val)}
-                        className="h-full"
-                      />
-                    </div>
-                    {/* Footer */}
-                    <div className="flex justify-end gap-2 border-t p-3">
-
-                      <button
-                        onClick={() => setModalOpen(false)}
-                        className="rounded-md bg-gray-100 px-4 py-2 text-gray-700 hover:bg-gray-200">
-
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleSave}
-                        className="rounded-md bg-gray-600 px-4 py-2 text-white hover:bg-gray-700">
-
-                        Save
-                      </button>
-                    </div>
-                    {/* Modal Toast */}
-                    {modalToast && (
-                      <div
-                        className={`pointer-events-none absolute bottom-3 right-3 rounded border px-2 py-1 text-[11px] shadow-sm ${
-                          modalToast.type === 'success'
-                            ? 'bg-green-50 text-green-700 border-green-200'
-                            : 'bg-red-50 text-red-700 border-red-200'
-                        }`}
-                        role="status"
-                        aria-live="polite"
-                      >
-                        {modalToast.message}
-                      </div>
-                    )}
-                  </div>
+                    Insert CURL
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => updateTabInput(activeTabId, 'editorLeft', (activeTab?.inputs.editorLeft ?? '') + (activeTab?.inputs.editorLeft ? '\n\n' : '') + 'fetch("https://api.example.com/resource", {\n  method: "GET",\n  headers: { "Accept": "application/json" }\n});')}
+                  >
+                    Insert Fetch
+                  </Button>
                 </div>
-              )}
-              {/* buttons */}
-              <div className="ml-4 flex flex-row items-center space-x-2">
-                <Button onClick={handleClear} variant="outline" className="whitespace-nowrap">
-                  Clear
-                </Button>
-                <Button onClick={handleExecute} variant="outline" className="whitespace-nowrap">
-                  Execute
-                </Button>
-                <Button onClick={handleInjectAndExecute} variant="outline" className="whitespace-nowrap">
-                  Inject & Execute
-                </Button>
+                <CodeEditor
+                  value={activeTab?.inputs.editorLeft ?? ''}
+                  onChange={val => updateTabInput(activeTabId, 'editorLeft', val)}
+                  language={leftEditorLanguage}
+                  onCtrlEnter={handleExecute}
+                  height={280}
+                />
               </div>
-            </div>
-          </div>
-
-          {/* Bottom Panels */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* Left Column */}
-            <div className="flex flex-col space-y-4">
-              <div className="rounded-lg border border-gray-200 p-3">
-                <div
-                  onChange={e =>
-                    setTabs(
-                      tabs.map(t =>
-                        t.id === activeTabId ? { ...t, inputs: { ...t.inputs, url: e.target.value } } : t,
-                      ),
-                    )
-                  }
-                  className="text-center text-gray-700">
-                  {activeTab?.inputs.url}
-                </div>
-              </div>
-
-              <div className="min-h-[200px] rounded-lg border border-gray-200 p-3">
-                <div className="text-center text-gray-700">
-                  <JSONViewer
-                    jsonString={optionsText}
-                    validate={true}
-                    onChange={newJson =>
-                      updateTabInput(activeTabId, 'options', looseRecursiveJSONParse(newJson ?? ''))
-                    }
-                  />
-                </div>
+              {/* Right monaco editor */}
+              <div className="flex flex-col">
+                <div className="mb-2 text-sm font-medium text-gray-700">Right Editor</div>
+                <CodeEditor
+                  value={rightEditorPrettyValue}
+                  onChange={val => updateTabInput(activeTabId, 'editorRight', val)}
+                  language="json"
+                  readOnly={true}
+                  height={280}
+                />
               </div>
             </div>
 
-            {/* Right Column */}
-            <div className="flex flex-col space-y-4">
-              <div className="rounded-lg border border-gray-200 p-3">
-                <div className="text-center text-gray-700">
-                  <JSONViewer
-                    jsonString={activeTab?.outputs.body ?? ''}
-                    validate={false}
-                    onChange={newJson => updateTabOutput(activeTabId, 'body', newJson ?? '')}
-                  />
-                </div>
-              </div>
-
-              <div className="min-h-[200px] rounded-lg border border-gray-200 p-3">
-                <div className="text-center text-gray-700">
-                  <JSONViewer
-                    jsonString={activeTab?.outputs.headers ?? ''}
-                    validate={false}
-                    onChange={newJson => updateTabOutput(activeTabId, 'headers', newJson ?? '')}
-                  />
-                </div>
-              </div>
+            {/* Action buttons */}
+            <div className="mt-4 flex flex-row items-center space-x-2">
+              <Button onClick={handleClear} variant="outline" className="whitespace-nowrap">
+                Clear
+              </Button>
+              <Button onClick={handleExecute} variant="outline" className="whitespace-nowrap">
+                Execute
+              </Button>
+              <Button onClick={handleInjectAndExecute} variant="outline" className="whitespace-nowrap">
+                Inject & Execute
+              </Button>
             </div>
           </div>
         </div>

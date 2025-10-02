@@ -70,9 +70,22 @@ const manifest = {
     },
   ],
   devtools_page: 'devtools/index.html',
+  content_security_policy: {
+    // Allow WASM eval for Monaco and keep scripts to 'self' (no CDN). Workers loaded via URL (no blob:).
+    extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
+  },
   web_accessible_resources: [
     {
-      resources: ['*.js', '*.css', '*.svg', 'icon-128.png', 'icon-34.png'],
+      resources: [
+        '*.js',
+        '*.css',
+        '*.svg',
+        'icon-128.png',
+        'icon-34.png',
+        // Expose monaco worker bundles if emitted as files by Vite
+        'assets/*worker*.js',
+        'assets/*worker*.map',
+      ],
       matches: ['*://*/*'],
     },
   ],
