@@ -44,13 +44,27 @@ export const useFetchParser = (): UseFetchParserReturn => {
       if (isCurl(fetchCode)) {
         const { options } = parseCurl(fetchCode);
         const m = String((options as any).method ?? 'GET').toUpperCase();
+        // For curl, parseCurlAdvanced already infers POST when a body exists
         return m;
       }
-      const methodMatch = fetchCode.match(/method["']?:\s*["']([A-Z]+)["']/i);
+      // Detect explicit method in fetch/axios options
+      const methodMatch = fetchCode.match(/method["']?\s*:\s*["']([a-zA-Z]+)["']/i);
       if (methodMatch && methodMatch[1]) {
         return methodMatch[1].toUpperCase();
       }
-      return 'GET';
+
+      // If options object exists and contains a body, infer POST
+      const optionsPattern = /fetch\s*\(\s*[^,]+,\s*({[\s\S]*?})\s*\)/i;
+      const optionsMatch = fetchCode.match(optionsPattern);
+      if (optionsMatch && optionsMatch[1]) {
+        const optsText = optionsMatch[1];
+        if (/\bbody\s*:/i.test(optsText)) {
+          return 'POST';
+        }
+      }
+
+      // No reliable method detected
+      return undefined;
     } catch {
       return;
     }

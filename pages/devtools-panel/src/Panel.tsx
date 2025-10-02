@@ -43,36 +43,50 @@ const Panel = () => {
     return `Tab${next}`;
   }, [tabs]);
 
-  // Update tab name based on request content (METHOD lastPath)
+  // Update tab name based on request content (METHOD lastPath), always re-evaluating
   const updateTabNameFromContent = useCallback(
     (tabId: string, content: string) => {
       try {
         const method = extractHttpMethod(content)?.toUpperCase();
         const path = extractUrlPath(content);
-        if (method) {
-          setTabs(prev =>
-            prev.map(t => {
-              if (t.id !== tabId) return t;
-              if (t.userRenamed) {
-                // Keep user-defined suffix; only update the method prefix
-                const current = t.name ?? '';
-                const first = current.trim().split(/\s+/)[0];
-                const hasMethodPrefix = /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)$/i.test(first ?? '');
-                const suffix = hasMethodPrefix ? current.slice(first.length).trimStart() : current;
-                const newName = `${method} ${suffix}`.trim();
-                return { ...t, name: newName };
+        setTabs(prev =>
+          prev.map(t => {
+            if (t.id !== tabId) return t;
+
+            const current = t.name ?? '';
+            const first = current.trim().split(/\s+/)[0] ?? '';
+            const hasMethodPrefix = /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)$/i.test(first);
+            const existingSuffix = hasMethodPrefix ? current.slice(first.length).trimStart() : current;
+
+            if (t.userRenamed) {
+              // User controls suffix; we only manage the method prefix
+              if (method) {
+                return { ...t, name: `${method} ${existingSuffix}`.trim() };
               }
-              // If not userRenamed, use METHOD path if available; otherwise just METHOD
-              const newName = path ? `${method} ${path}` : method;
-              return { ...t, name: newName };
-            }),
-          );
-        }
+              // No method detected: strip any existing method prefix
+              return { ...t, name: existingSuffix };
+            }
+
+            // Auto-managed naming
+            if (method) {
+              const auto = path ? `${method} ${path}` : method;
+              return { ...t, name: auto };
+            }
+
+            // No method; use path if available, otherwise strip stale method prefix
+            if (path) {
+              return { ...t, name: path };
+            }
+
+            const fallback = existingSuffix || current || getNextTabDefaultName();
+            return { ...t, name: fallback };
+          }),
+        );
       } catch {
         // ignore parse errors
       }
     },
-    [extractHttpMethod, extractUrlPath, setTabs],
+    [extractHttpMethod, extractUrlPath, setTabs, getNextTabDefaultName],
   );
 
   useEffect(() => {
@@ -269,7 +283,13 @@ const Panel = () => {
     setTabs(prev =>
       prev.map(t =>
         t.id === activeTabId
-          ? { ...t, inputs: { requestType: 'fetch', options: {}, editorLeft: '', editorRight: '' }, outputs: {} }
+          ? {
+              ...t,
+              name: getNextTabDefaultName(),
+              userRenamed: false,
+              inputs: { requestType: 'fetch', options: {}, editorLeft: '', editorRight: '' },
+              outputs: {},
+            }
           : t,
       ),
     );
