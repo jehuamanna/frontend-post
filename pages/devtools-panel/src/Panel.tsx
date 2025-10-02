@@ -31,16 +31,36 @@ const Panel = () => {
   const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
   const [renameInput, setRenameInput] = useState<string>('');
 
+  // Reorder unnamed tabs to always start from 1 and be sequential
+  useEffect(() => {
+    setTabs(prev => {
+      let counter = 1;
+      return prev.map(t => {
+        const m = /^Tab(\d+)$/.exec(t.name?.trim() ?? '');
+        if (m && !t.userRenamed) {
+          // This is an unnamed tab, renumber it sequentially
+          return { ...t, name: `Tab${counter++}` };
+        }
+        return t;
+      });
+    });
+  }, [tabs.length, setTabs]);
+
   // Compute next default tab name in the form Tab<number>
   const getNextTabDefaultName = useCallback((): string => {
-    const nums = tabs
-      .map(t => {
-        const m = /^Tab(\d+)$/.exec(t.name?.trim() ?? '');
-        return m ? parseInt(m[1], 10) : null;
-      })
-      .filter((n): n is number => n !== null);
-    const next = (nums.length ? Math.max(...nums) : 0) + 1;
-    return `Tab${next}`;
+    // Collect existing Tab<number> indices
+    const used = new Set(
+      tabs
+        .map(t => {
+          const m = /^Tab(\d+)$/.exec(t.name?.trim() ?? '');
+          return m ? parseInt(m[1], 10) : null;
+        })
+        .filter((n): n is number => n !== null),
+    );
+    // Find the smallest positive integer not used
+    let n = 1;
+    while (used.has(n)) n += 1;
+    return `Tab${n}`;
   }, [tabs]);
 
   // Update tab name based on request content (METHOD lastPath), always re-evaluating
