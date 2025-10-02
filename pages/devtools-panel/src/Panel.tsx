@@ -27,6 +27,54 @@ const Panel = () => {
   const placeholder = 'Enter the Curl or Fetch Request';
   const ref = useRef<HTMLDivElement>(null);
 
+  // Rename state for inline tab title editing (only the portion after HTTP METHOD)
+  const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
+  const [renameInput, setRenameInput] = useState<string>('');
+
+  // Compute next default tab name in the form Tab<number>
+  const getNextTabDefaultName = useCallback((): string => {
+    const nums = tabs
+      .map(t => {
+        const m = /^Tab(\d+)$/.exec(t.name?.trim() ?? '');
+        return m ? parseInt(m[1], 10) : null;
+      })
+      .filter((n): n is number => n !== null);
+    const next = (nums.length ? Math.max(...nums) : 0) + 1;
+    return `Tab${next}`;
+  }, [tabs]);
+
+  // Update tab name based on request content (METHOD lastPath)
+  const updateTabNameFromContent = useCallback(
+    (tabId: string, content: string) => {
+      try {
+        const method = extractHttpMethod(content)?.toUpperCase();
+        const path = extractUrlPath(content);
+        if (method) {
+          setTabs(prev =>
+            prev.map(t => {
+              if (t.id !== tabId) return t;
+              if (t.userRenamed) {
+                // Keep user-defined suffix; only update the method prefix
+                const current = t.name ?? '';
+                const first = current.trim().split(/\s+/)[0];
+                const hasMethodPrefix = /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)$/i.test(first ?? '');
+                const suffix = hasMethodPrefix ? current.slice(first.length).trimStart() : current;
+                const newName = `${method} ${suffix}`.trim();
+                return { ...t, name: newName };
+              }
+              // If not userRenamed, use METHOD path if available; otherwise just METHOD
+              const newName = path ? `${method} ${path}` : method;
+              return { ...t, name: newName };
+            }),
+          );
+        }
+      } catch {
+        // ignore parse errors
+      }
+    },
+    [extractHttpMethod, extractUrlPath, setTabs],
+  );
+
   useEffect(() => {
     setActiveTab(tabs.find(t => t.id === activeTabId));
   }, [tabs, activeTabId]);
@@ -61,6 +109,55 @@ const Panel = () => {
       el.removeEventListener('input', handleInput);
     };
   }, [updateTabInput, activeTabId]);
+
+  // Helpers for tab method parsing and color coding
+  const getMethodFromTabName = (name?: string): string | null => {
+    if (!name) return null;
+    const first = name.trim().split(/\s+/)[0];
+    if (/^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)$/i.test(first)) return first.toUpperCase();
+    return null;
+  };
+
+  const methodBadgeClass = (method: string | null): string => {
+    switch (method) {
+      case 'GET':
+        return 'bg-green-100 text-green-700 border-green-300';
+      case 'POST':
+        return 'bg-blue-100 text-blue-700 border-blue-300';
+      case 'PUT':
+        return 'bg-amber-100 text-amber-700 border-amber-300';
+      case 'PATCH':
+        return 'bg-purple-100 text-purple-700 border-purple-300';
+      case 'DELETE':
+        return 'bg-red-100 text-red-700 border-red-300';
+      case 'OPTIONS':
+      case 'HEAD':
+        return 'bg-gray-100 text-gray-700 border-gray-300';
+      default:
+        return 'bg-gray-50 text-gray-600 border-gray-200';
+    }
+  };
+
+  // Start rename on double click, only editing portion after METHOD (if present)
+  const startRename = (tab: Tab) => {
+    const method = getMethodFromTabName(tab.name);
+    if (method) {
+      const rest = tab.name.slice(method.length).trimStart();
+      setRenameInput(rest);
+    } else {
+      setRenameInput(tab.name ?? '');
+    }
+    setRenamingTabId(tab.id);
+  };
+
+  // Commit rename on blur or Enter
+  const commitRename = (tab: Tab) => {
+    const method = getMethodFromTabName(tab.name);
+    const trimmed = renameInput.trim();
+    const newName = method ? `${method} ${trimmed}`.trim() : trimmed || tab.name;
+    setTabs(prev => prev.map(t => (t.id === tab.id ? { ...t, name: newName, userRenamed: true } : t)));
+    setRenamingTabId(null);
+  };
 
   useEffect(() => {
     const el = ref.current;
@@ -97,6 +194,8 @@ const Panel = () => {
       ref.current.innerText = modalValue;
     }
     updateTabInput(activeTabId, 'editorLeft', modalValue);
+    // Update name from content
+    updateTabNameFromContent(activeTabId, modalValue);
 
     // Parse options from the edited content (URL is derived at execute time)
     const details = extractFetchDetails(modalValue);
@@ -181,12 +280,32 @@ const Panel = () => {
   const handleAddTab = () => {
     const newTab: Tab = {
       id: crypto.randomUUID(),
-      name: `Tab ${tabs.length + 1}`,
+      name: getNextTabDefaultName(),
       inputs: { requestType: 'fetch', options: {}, editorLeft: '', editorRight: '' },
       outputs: {},
     };
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newTab.id);
+  };
+
+  // Close tab; if only one tab remains, replace with a fresh TabN
+  const handleCloseTab = (tabId: string) => {
+    if (tabs.length <= 1) {
+      const newTab: Tab = {
+        id: crypto.randomUUID(),
+        name: getNextTabDefaultName(),
+        inputs: { requestType: 'fetch', options: {}, editorLeft: '', editorRight: '' },
+        outputs: {},
+      };
+      setTabs([newTab]);
+      setActiveTabId(newTab.id);
+      return;
+    }
+    const remaining = tabs.filter(t => t.id !== tabId);
+    setTabs(remaining);
+    if (activeTabId === tabId) {
+      setActiveTabId(remaining[0].id);
+    }
   };
 
   const handleExecute = async () => {
@@ -242,6 +361,8 @@ const Panel = () => {
     console.log('fetch details:', fetchDetails);
     // Store the full pasted content in the left editor
     updateTabInput(activeTabId, 'editorLeft', text);
+    // Update name from pasted content
+    updateTabNameFromContent(activeTabId, text);
     // And parse options alongside it
     updateTabInput(activeTabId, 'options', looseRecursiveJSONParse(fetchDetails.options ?? ''));
     console.log('dddddddddddddddddddd', tabs);
@@ -254,14 +375,56 @@ const Panel = () => {
         {/* Top Bar: Tabs */}
         <div className="flex items-center border-b border-gray-200 px-2 py-1">
           <div className="flex space-x-1 overflow-x-auto">
-            {tabs.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTabId(tab.id)}
-                className={`border px-3 py-1 text-sm ${activeTabId === tab.id ? 'bg-gray-100' : 'bg-white'}`}>
-                {tab.name}
-              </button>
-            ))}
+            {tabs.map(tab => {
+              const method = getMethodFromTabName(tab.name);
+              const rest = method ? tab.name.slice(method.length).trimStart() : tab.name;
+              const isActive = activeTabId === tab.id;
+              return (
+                <div key={tab.id} className={`flex items-center border rounded max-w-xs ${isActive ? 'bg-gray-100' : 'bg-white'}`}>
+                  <button
+                    onClick={() => setActiveTabId(tab.id)}
+                    className="flex items-center gap-2 px-2 py-1 text-sm truncate"
+                    onDoubleClick={() => startRename(tab)}
+                    title={tab.name}
+                  >
+                    <span className={`border text-[10px] px-1 py-0.5 rounded ${methodBadgeClass(method)}`}>
+                      {method ?? 'TAB'}
+                    </span>
+                    {renamingTabId === tab.id ? (
+                      <input
+                        autoFocus
+                        className="bg-transparent outline-none border-b border-dashed border-gray-300 text-sm w-32 truncate"
+                        value={renameInput}
+                        onChange={e => setRenameInput(e.target.value)}
+                        onBlur={() => commitRename(tab)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            commitRename(tab);
+                          } else if (e.key === 'Escape') {
+                            setRenamingTabId(null);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <span className="truncate">
+                        {rest}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    aria-label="Close tab"
+                    className="px-2 py-1 text-gray-500 hover:text-red-600"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCloseTab(tab.id);
+                    }}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
           <button onClick={handleAddTab} className="ml-1 rounded-lg border px-3 py-1 text-sm">
             +
@@ -287,7 +450,10 @@ const Panel = () => {
               <div className="flex-1 min-h-0">
                 <CodeEditor
                   value={activeTab?.inputs.editorLeft ?? ''}
-                  onChange={val => updateTabInput(activeTabId, 'editorLeft', val)}
+                  onChange={val => {
+                    updateTabInput(activeTabId, 'editorLeft', val);
+                    updateTabNameFromContent(activeTabId, val);
+                  }}
                   language={leftEditorLanguage}
                   onCtrlEnter={handleExecute}
                   height="100%"
