@@ -116,7 +116,7 @@ const executeFetch = async (fetchUrl: string, headersAndCookies: unknown): Promi
     }
 
     return {
-      body,
+      body: JSON.parse(body),
       headers: enhancedHeaders,
       cookies,
       statusCode,
