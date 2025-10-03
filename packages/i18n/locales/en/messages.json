@@ -1,11 +1,11 @@
 {
   "extensionDescription": {
     "description": "Extension description",
-    "message": "Chrome extension boilerplate developed with Vite, React and Typescript"
+    "message": "Test APIs in DevTools. Paste cURL/fetch commands, execute requests, and view formatted responses with syntax highlighting."
   },
   "extensionName": {
     "description": "Extension name",
-    "message": "Chrome extension boilerplate"
+    "message": "Frontend Post"
   },
   "toggleTheme": {
     "message": "Toggle theme"
@@ -18,7 +18,7 @@
     "message": "Hello, My name is $NAME$",
     "placeholders": {
       "name": {
-        "content": "$1",
+        "content": "$NAME$",
         "example": "John Doe"
       }
     }
