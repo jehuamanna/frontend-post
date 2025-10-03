@@ -159,12 +159,32 @@ export const useFetchParser = (): UseFetchParserReturn => {
         extractedUrl = urlMatch[1];
       }
 
-      // Extract fetch options more robustly
-      const optionsPattern = /fetch\s*\(['"`][^'"`]+['"`]\s*,\s*({[\s\S]*?})\s*\)/;
+      // Extract fetch options more robustly - handle multiline and nested objects
+      const optionsPattern = /fetch\s*\(\s*['"`][^'"`]+['"`]\s*,\s*({[\s\S]*})\s*\)/;
       const optionsMatch = fetchCode.match(optionsPattern);
 
       if (optionsMatch && optionsMatch[1]) {
-        extractedOptions = optionsMatch[1];
+        let optionsText = optionsMatch[1];
+        
+        // Handle nested braces by counting them
+        let braceCount = 0;
+        let endIndex = 0;
+        for (let i = 0; i < optionsText.length; i++) {
+          if (optionsText[i] === '{') braceCount++;
+          if (optionsText[i] === '}') {
+            braceCount--;
+            if (braceCount === 0) {
+              endIndex = i + 1;
+              break;
+            }
+          }
+        }
+        
+        if (endIndex > 0) {
+          extractedOptions = optionsText.substring(0, endIndex);
+        } else {
+          extractedOptions = optionsText;
+        }
       }
 
       return { url: extractedUrl, options: extractedOptions };

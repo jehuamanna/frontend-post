@@ -60,6 +60,23 @@ const executeFetch = async (fetchUrl: string, headersAndCookies: unknown): Promi
       } else if (headersAndCookies && typeof headersAndCookies === 'object') {
         options = headersAndCookies as RequestInit;
       }
+
+      // Ensure body is properly stringified if it's an object
+      if (options.body && typeof options.body === 'object') {
+        options.body = JSON.stringify(options.body);
+        
+        // Auto-add Content-Type header for JSON bodies if not already present
+        if (!options.headers) {
+          options.headers = {};
+        }
+        const headers = options.headers as Record<string, string>;
+        const hasContentType = Object.keys(headers).some(key => 
+          key.toLowerCase() === 'content-type'
+        );
+        if (!hasContentType) {
+          headers['Content-Type'] = 'application/json';
+        }
+      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error parsing JSON';
       return {
@@ -70,8 +87,13 @@ const executeFetch = async (fetchUrl: string, headersAndCookies: unknown): Promi
       };
     }
 
+    console.log('Executing fetch with:', { url, options });
+    console.log('Options headers:', options.headers);
+    
     const response = await fetch(url, options);
     const statusCode = response.status;
+    
+    console.log('Fetch response:', { status: statusCode, ok: response.ok });
 
     const headers: Record<string, string | string[]> = {};
     let cookies: string[] = [];
@@ -116,15 +138,27 @@ const executeFetch = async (fetchUrl: string, headersAndCookies: unknown): Promi
     }
 
     return {
-      body: JSON.parse(body),
+      body: body,
       headers: enhancedHeaders,
       cookies,
       statusCode,
     };
   } catch (error: unknown) {
+    console.error('Fetch error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Provide more specific error information
+    let detailedError = `Error executing fetch: ${errorMessage}`;
+    if (error instanceof TypeError && errorMessage.includes('Failed to fetch')) {
+      detailedError += '\n\nPossible causes:\n' +
+        '• CORS policy blocking the request\n' +
+        '• Network connectivity issues\n' +
+        '• Invalid URL or unreachable server\n' +
+        '• Missing required headers (e.g., Content-Type for POST requests)';
+    }
+    
     return {
-      body: `Error executing fetch: ${errorMessage}`,
+      body: detailedError,
       headers: {},
       cookies: [],
       statusCode: null,

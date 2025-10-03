@@ -31,6 +31,10 @@ const manifest = {
   version: packageJson.version,
   description: '__MSG_extensionDescription__',
   permissions: ['storage', 'activeTab', 'cookies'],
+  host_permissions: [
+    'https://*/*', // Allow requests to any HTTPS domain
+    'http://*/*'   // Allow requests to any HTTP domain (for testing)
+  ],
   options_page: 'options/index.html',
   background: {
     service_worker: 'background.js',
