@@ -38,6 +38,67 @@ interface FetchResult {
 }
 
 /**
+ * Recursively parse JSON strings within an object/array
+ * This helps when APIs return JSON as strings within other JSON objects
+ */
+const recursivelyParseJsonStrings = (obj: any): any => {
+  if (typeof obj === 'string') {
+    // Try to parse the string as JSON
+    const trimmed = obj.trim();
+    
+    // Check if it looks like JSON (starts with { or [ and ends with } or ])
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || 
+        (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        console.log('Successfully parsed JSON string:', trimmed.substring(0, 100) + '...');
+        // Recursively parse the newly parsed object
+        return recursivelyParseJsonStrings(parsed);
+      } catch (error) {
+        console.log('Failed to parse JSON string:', trimmed.substring(0, 100) + '...', error);
+        // If parsing fails, return the original string
+        return obj;
+      }
+    }
+    
+    // Also try to parse strings that might be JSON but with escaped quotes
+    if (trimmed.includes('\\"') && (trimmed.includes('\\"{') || trimmed.includes('\\"}') || trimmed.includes('\\"['))) {
+      try {
+        // First, try to parse as a JSON string (which would unescape it)
+        const unescaped = JSON.parse(`"${trimmed}"`);
+        if (typeof unescaped === 'string') {
+          // Now try to parse the unescaped string as JSON
+          const parsed = JSON.parse(unescaped);
+          console.log('Successfully parsed escaped JSON string');
+          return recursivelyParseJsonStrings(parsed);
+        }
+      } catch (error) {
+        console.log('Failed to parse escaped JSON string:', error);
+      }
+    }
+    
+    return obj;
+  }
+  
+  if (Array.isArray(obj)) {
+    // Recursively parse each element in the array
+    return obj.map(item => recursivelyParseJsonStrings(item));
+  }
+  
+  if (obj !== null && typeof obj === 'object') {
+    // Recursively parse each property in the object
+    const result: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = recursivelyParseJsonStrings(value);
+    }
+    return result;
+  }
+  
+  // For primitives (number, boolean, null), return as-is
+  return obj;
+};
+
+/**
  * Execute a fetch request and return the results
  */
 const executeFetch = async (fetchUrl: string, headersAndCookies: unknown): Promise<FetchResult> => {
@@ -127,22 +188,36 @@ const executeFetch = async (fetchUrl: string, headersAndCookies: unknown): Promi
       ...headers,
     };
 
-    // Response body
+    // Response body with recursive JSON parsing
     let body: string;
     const contentType = response.headers.get('content-type');
+    console.log('Response content-type:', contentType);
+    
     if (contentType && contentType.includes('application/json')) {
       const json = await response.json().catch(() => ({}));
-      body = JSON.stringify(json, null, 2);
+      console.log('Original JSON response:', json);
+      
+      const recursivelyParsedJson = recursivelyParseJsonStrings(json);
+      console.log('After recursive parsing:', recursivelyParsedJson);
+      
+      body = JSON.stringify(recursivelyParsedJson, null, 2);
     } else {
       body = await response.text();
+      console.log('Non-JSON response body:', body.substring(0, 200) + '...');
     }
 
-    return {
+    // Apply recursive parsing to the final response structure
+    const responsePayload = {
       body: body,
       headers: enhancedHeaders,
       cookies,
       statusCode,
     };
+    
+    const finalParsedResponse = recursivelyParseJsonStrings(responsePayload);
+    console.log('Final parsed response:', finalParsedResponse);
+    
+    return finalParsedResponse;
   } catch (error: unknown) {
     console.error('Fetch error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
