@@ -347,13 +347,22 @@ const Panel = () => {
   };
 
   const handleExecute = async () => {
+    console.log('🚀 DEBUG: handleExecute - Function entered');
     const rawText = activeTab?.inputs.editorLeft ?? '';
+    console.log('📝 DEBUG: handleExecute - Raw text from editor:', rawText.substring(0, 200) + '...');
+    
     const details = extractFetchDetails(rawText);
+    console.log('🔍 DEBUG: handleExecute - Extracted details:', details);
+    
     const url = details.url ?? '';
+    console.log('🌐 DEBUG: handleExecute - Extracted URL:', url);
+    
     // Build options by merging parsed options from the request text with any stored options
     // If stored options is an empty object, prefer parsed options
     const storedOptsRaw = activeTab?.inputs.options;
     const parsedOptsRaw = details.options ?? '';
+    console.log('⚙️ DEBUG: handleExecute - Stored options raw:', storedOptsRaw);
+    console.log('⚙️ DEBUG: handleExecute - Parsed options raw:', parsedOptsRaw);
 
     const parsedOpts: RequestInit = typeof parsedOptsRaw === 'string'
       ? ((parsedOptsRaw ? (looseRecursiveJSONParse(parsedOptsRaw) as unknown as RequestInit) : {}) as RequestInit)
@@ -366,13 +375,21 @@ const Panel = () => {
     const isEmptyObject = (o: unknown) => !!o && typeof o === 'object' && Object.keys(o as Record<string, unknown>).length === 0;
     const base: RequestInit = isEmptyObject(storedOpts) ? parsedOpts : parsedOpts;
     const optionsObj: RequestInit = { ...base, ...storedOpts };
+    console.log('🔧 DEBUG: handleExecute - Final merged options:', optionsObj);
+    
     if (!url) {
       console.warn(
         '[Devtools Panel] No valid URL parsed from the Request editor. Executor will return an error body and statusCode: null; the Response editor will still display the error payload.'
       );
     }
+    
+    console.log('📡 DEBUG: handleExecute - About to call executeFetch with:', { url, optionsObj });
     const response = await executeFetch(url, optionsObj);
+    console.log('📨 DEBUG: handleExecute - Received response from executeFetch:', response);
+    
     updateTabOutput(activeTabId, 'statusCode', response.statusCode?.toString() ?? '');
+    console.log('💾 DEBUG: handleExecute - Updated status code:', response.statusCode);
+    
     // Store the entire response payload as a JSON string in the right editor
     const payload = {
       statusCode: response.statusCode ?? null,
@@ -380,7 +397,10 @@ const Panel = () => {
       headers: response.headers ?? {},
       cookies: response.cookies ?? [],
     };
+    console.log('📦 DEBUG: handleExecute - Final payload for right editor:', payload);
+    
     updateTabInput(activeTabId, 'editorRight', JSON.stringify(payload, null, 2));
+    console.log('✅ DEBUG: handleExecute - Function completed successfully');
   };
 
   const handleInjectAndExecute = () => { };

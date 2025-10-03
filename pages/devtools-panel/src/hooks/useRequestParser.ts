@@ -140,11 +140,15 @@ export const useFetchParser = (): UseFetchParserReturn => {
    * (improved with multiple regex patterns, including backticks)
    */
   const extractFetchDetails = (fetchCode: string): { url: string | null; options: string | null } => {
+    console.log('🔍 DEBUG: extractFetchDetails - Function entered with code:', fetchCode.substring(0, 100) + '...');
     try {
       if (isCurl(fetchCode)) {
+        console.log('🐚 DEBUG: extractFetchDetails - Detected curl command');
         const { url, options } = parseCurl(fetchCode);
+        console.log('🐚 DEBUG: extractFetchDetails - Parsed curl result:', { url, options });
         return { url, options: JSON.stringify(options, null, 2) };
       }
+      console.log('🌐 DEBUG: extractFetchDetails - Processing as fetch request');
       let extractedUrl = '';
       let extractedOptions = '';
 
@@ -157,14 +161,17 @@ export const useFetchParser = (): UseFetchParserReturn => {
 
       if (urlMatch && urlMatch[1]) {
         extractedUrl = urlMatch[1];
+        console.log('🌐 DEBUG: extractFetchDetails - Extracted URL:', extractedUrl);
       }
 
       // Extract fetch options more robustly - handle multiline and nested objects
       const optionsPattern = /fetch\s*\(\s*['"`][^'"`]+['"`]\s*,\s*({[\s\S]*})\s*\)/;
       const optionsMatch = fetchCode.match(optionsPattern);
+      console.log('⚙️ DEBUG: extractFetchDetails - Options pattern match:', !!optionsMatch);
 
       if (optionsMatch && optionsMatch[1]) {
         let optionsText = optionsMatch[1];
+        console.log('⚙️ DEBUG: extractFetchDetails - Raw options text:', optionsText.substring(0, 200) + '...');
         
         // Handle nested braces by counting them
         let braceCount = 0;
@@ -185,9 +192,12 @@ export const useFetchParser = (): UseFetchParserReturn => {
         } else {
           extractedOptions = optionsText;
         }
+        console.log('⚙️ DEBUG: extractFetchDetails - Final extracted options:', extractedOptions);
       }
 
-      return { url: extractedUrl, options: extractedOptions };
+      const result = { url: extractedUrl, options: extractedOptions };
+      console.log('✅ DEBUG: extractFetchDetails - Function completed with result:', result);
+      return result;
     } catch (error) {
       console.error('Error extracting URL and options:', error);
     }

@@ -102,9 +102,13 @@ const recursivelyParseJsonStrings = (obj: any): any => {
  * Execute a fetch request and return the results
  */
 const executeFetch = async (fetchUrl: string, headersAndCookies: unknown): Promise<FetchResult> => {
+  console.log('🚀 DEBUG: executeFetch (background) - Function entered with:', { fetchUrl, headersAndCookies });
   try {
     const url = fetchUrl.trim();
+    console.log('🌐 DEBUG: executeFetch (background) - Trimmed URL:', url);
+    
     if (!url) {
+      console.log('❌ DEBUG: executeFetch (background) - No URL provided, returning error');
       return {
         body: 'Error: URL is required',
         headers: {},
@@ -114,17 +118,25 @@ const executeFetch = async (fetchUrl: string, headersAndCookies: unknown): Promi
     }
 
     let options: RequestInit = {};
+    console.log('⚙️ DEBUG: executeFetch (background) - Processing options, type:', typeof headersAndCookies);
+    
     try {
       if (typeof headersAndCookies === 'string') {
+        console.log('📝 DEBUG: executeFetch (background) - Parsing string options:', headersAndCookies);
         const s = headersAndCookies.trim();
         if (s) options = JSON.parse(s);
       } else if (headersAndCookies && typeof headersAndCookies === 'object') {
+        console.log('📦 DEBUG: executeFetch (background) - Using object options:', headersAndCookies);
         options = headersAndCookies as RequestInit;
       }
+      
+      console.log('⚙️ DEBUG: executeFetch (background) - Parsed options:', options);
 
       // Ensure body is properly stringified if it's an object
       if (options.body && typeof options.body === 'object') {
+        console.log('🔄 DEBUG: executeFetch (background) - Stringifying object body:', options.body);
         options.body = JSON.stringify(options.body);
+        console.log('✅ DEBUG: executeFetch (background) - Stringified body:', options.body);
         
         // Auto-add Content-Type header for JSON bodies if not already present
         if (!options.headers) {
@@ -135,9 +147,12 @@ const executeFetch = async (fetchUrl: string, headersAndCookies: unknown): Promi
           key.toLowerCase() === 'content-type'
         );
         if (!hasContentType) {
+          console.log('📋 DEBUG: executeFetch (background) - Adding Content-Type header');
           headers['Content-Type'] = 'application/json';
         }
       }
+      
+      console.log('🔧 DEBUG: executeFetch (background) - Final processed options:', options);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error parsing JSON';
       return {
@@ -213,9 +228,11 @@ const executeFetch = async (fetchUrl: string, headersAndCookies: unknown): Promi
       cookies,
       statusCode,
     };
+    console.log('📦 DEBUG: executeFetch (background) - Response payload before recursive parsing:', responsePayload);
     
     const finalParsedResponse = recursivelyParseJsonStrings(responsePayload);
-    console.log('Final parsed response:', finalParsedResponse);
+    console.log('🔄 DEBUG: executeFetch (background) - Final parsed response after recursive parsing:', finalParsedResponse);
+    console.log('✅ DEBUG: executeFetch (background) - Function completed successfully');
     
     return finalParsedResponse;
   } catch (error: unknown) {
@@ -243,26 +260,39 @@ const executeFetch = async (fetchUrl: string, headersAndCookies: unknown): Promi
 
 // Handle connections from devtools panels
 chrome.runtime.onConnect.addListener(port => {
-  console.log('Connection established with port:', port.name);
+  console.log('🔌 DEBUG: Background - Connection established with port:', port.name);
 
   if (port.name === 'devtools-panel') {
     port.onMessage.addListener(async message => {
+      console.log('📥 DEBUG: Background - Received message:', message);
+      
       if (message.type === 'EXECUTE_FETCH') {
-        console.log('Received fetch request:', message);
+        console.log('🚀 DEBUG: Background - Processing EXECUTE_FETCH request for:', message.url);
+        console.log('🆔 DEBUG: Background - Request ID:', message.requestId);
+        
         try {
           const result = await executeFetch(message.url, message.options);
-          port.postMessage({
+          console.log('✅ DEBUG: Background - executeFetch completed successfully:', result);
+          
+          const responseMessage = {
             type: 'FETCH_RESULT',
             result,
             requestId: message.requestId, // Pass back the requestId for request matching
-          });
+          };
+          console.log('📤 DEBUG: Background - Sending success response:', responseMessage);
+          port.postMessage(responseMessage);
+          
         } catch (error: unknown) {
+          console.log('❌ DEBUG: Background - executeFetch failed with error:', error);
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred during fetch';
-          port.postMessage({
+          
+          const errorResponse = {
             type: 'FETCH_ERROR',
             error: errorMessage,
             requestId: message.requestId, // Pass back the requestId even for errors
-          });
+          };
+          console.log('📤 DEBUG: Background - Sending error response:', errorResponse);
+          port.postMessage(errorResponse);
         }
       }
     });
